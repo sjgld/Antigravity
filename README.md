@@ -8,7 +8,12 @@
 
 ## 下载与使用
 
-前往 [Releases](https://github.com/sjgld/Antigravity/releases) 下载 Windows 便携版。解压后运行 `AG_2.31.2_1.exe`。
+前往 [Releases](https://github.com/sjgld/Antigravity/releases) 下载对应平台的中文便携版。
+
+- **Windows**：下载 ZIP，解压后运行 `AG_2.31.2_1.exe`。
+- **macOS（Apple Silicon）**：下载 `AG_2.31.2_1_macos.tar.gz`，解压后运行 `启动.command`。最低目标系统为 macOS 13，详见 [Mac 使用说明](macos/README.md)。
+
+以下步骤适用于 Windows：
 
 1. 安装 Google 官方 Antigravity。上游声明支持 Antigravity 2.31.1 及更新版本；中文分支基于 2.31.2 源码。
 2. 以管理员身份运行解锁器。客户端补丁可以在用户权限下应用，DNS 规则和自动补丁后台组件需要管理员权限。
@@ -40,7 +45,7 @@ cargo build --locked --release
 
 生成文件：`target/release/ag_unlocker.exe`。运行 `ag_unlocker.exe --tui` 可使用终端界面。
 
-Linux/macOS 的界面文本同样已中文化，平台运行方式见 [上游说明](README.ru.md)；本分支首个发行包面向 Windows，其他平台暂未发布二进制安装包。
+macOS 构建由 `.github/workflows/macos.yml` 在 Apple Silicon 环境完成，使用本地临时签名，未进行 Apple 公证。Linux 的界面文本同样已中文化，但本分支暂未发布 Linux 二进制包，平台运行方式见 [上游说明](README.ru.md)。
 
 ## 中文化维护
 

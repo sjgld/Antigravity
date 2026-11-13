@@ -6,3 +6,4 @@
 /src/exits.rs
 *.part
 __pycache__/
+dist/
