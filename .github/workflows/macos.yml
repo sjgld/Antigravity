@@ -36,6 +36,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: macos-zh-cn-${{ inputs.runner }}
+          cache-on-failure: true
       - name: 检查中文化覆盖
         run: python3 tools/check_localization.py
       - name: macOS 测试

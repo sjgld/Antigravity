@@ -586,8 +586,11 @@ mod tests {
 
         // `binary_targets` finds it.
         let found = targets(&inst);
+        // macOS temp_dir may use /var while discovery resolves /private/var.
+        // Compare the file identity through canonical paths on every platform.
+        let expected = fs::canonicalize(&agy).unwrap();
         assert!(
-            found.contains(&agy),
+            found.iter().any(|p| fs::canonicalize(p).unwrap() == expected),
             "agy.exe must be a target: {:?}",
             found
         );
