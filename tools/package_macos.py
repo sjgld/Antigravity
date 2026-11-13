@@ -18,8 +18,9 @@ def run(*args):
 
 
 def main():
-    if platform.system() != 'Darwin' or platform.machine() != 'arm64':
-        raise SystemExit('Run this packager on an Apple Silicon Mac.')
+    if platform.system() != 'Darwin':
+        raise SystemExit('Run this packager on macOS.')
+    native_arm = platform.machine() == 'arm64'
     binary = ROOT / 'target/aarch64-apple-darwin/release/ag_unlocker'
     description = run('file', str(binary))
     assert 'Mach-O 64-bit executable arm64' in description, description
@@ -29,8 +30,9 @@ def main():
     print(run('otool', '-L', str(binary)), end='')
     load_commands = run('otool', '-l', str(binary))
     assert 'minos 13.0' in load_commands, 'Unexpected macOS deployment target'
-    banner = run(str(binary), '--version')
-    assert '2.31.2' in banner, banner
+    if native_arm:
+        banner = run(str(binary), '--version')
+        assert '2.31.2' in banner, banner
 
     dist = ROOT / 'dist'
     dist.mkdir(exist_ok=True)
@@ -56,6 +58,11 @@ def main():
             + run('git', 'rev-parse', 'HEAD').strip() + '\n'
             + f'Version: {VERSION}\nTarget: aarch64-apple-darwin\nMinimum macOS: 13.0\n',
             encoding='utf-8')
+        (bundle / 'BUILD-VERIFICATION.txt').write_text(
+            f'Build host: macOS {platform.mac_ver()[0]} ({platform.machine()})\n'
+            'Verified: Mach-O ARM64, deployment target, code signature, archive permissions\n'
+            + ('Verified: extracted launcher --version\n' if native_arm else
+               'ARM64 launch check: not run on Intel build host\n'), encoding='utf-8')
         subprocess.run(['sh', '-n', str(launcher)], check=True)
         archive = dist / f'{NAME}.tar.gz'
         with tarfile.open(archive, 'w:gz') as output:
@@ -69,7 +76,10 @@ def main():
         assert os.access(shipped / 'ag_unlocker', os.X_OK)
         assert os.access(shipped / '启动.command', os.X_OK)
         print(run('codesign', '--verify', '--strict', '--verbose=2', str(shipped / 'ag_unlocker')), end='')
-        assert '2.31.2' in run(str(shipped / '启动.command'), '--version')
+        if native_arm:
+            assert '2.31.2' in run(str(shipped / '启动.command'), '--version')
+        else:
+            print('Cross-built ARM64 package: launch check requires Apple Silicon.')
         digest = hashlib.sha256(archive.read_bytes()).hexdigest()
         (dist / 'SHA256SUMS-macos.txt').write_text(
             f'{digest}  {archive.name}\n', encoding='utf-8')

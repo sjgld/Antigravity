@@ -45,7 +45,7 @@ cargo build --locked --release
 
 生成文件：`target/release/ag_unlocker.exe`。运行 `ag_unlocker.exe --tui` 可使用终端界面。
 
-macOS 构建由 `.github/workflows/macos.yml` 在 Apple Silicon 环境完成，使用本地临时签名，未进行 Apple 公证。Linux 的界面文本同样已中文化，但本分支暂未发布 Linux 二进制包，平台运行方式见 [上游说明](README.ru.md)。
+macOS 构建由 `.github/workflows/macos.yml` 在 Mac 环境完成，可使用 Apple Silicon 原生编译或 Intel 交叉编译，产物均为 ARM64。使用本地临时签名，未进行 Apple 公证。Linux 的界面文本同样已中文化，但本分支暂未发布 Linux 二进制包，平台运行方式见 [上游说明](README.ru.md)。
 
 ## 中文化维护
 

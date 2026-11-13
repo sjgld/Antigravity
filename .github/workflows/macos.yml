@@ -4,11 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       runner:
-        description: 'Apple Silicon 构建环境（可切换以避开繁忙队列）'
+        description: 'Mac 构建环境（Intel 环境交叉编译 ARM64）'
         type: choice
         options:
           - macos-15
           - macos-26
+          - macos-15-intel
         default: macos-15
       release:
         description: '发布到现有 Release（留空则只生成构建产物）'
@@ -34,11 +35,11 @@ jobs:
           targets: aarch64-apple-darwin
       - uses: Swatinem/rust-cache@v2
         with:
-          key: macos-arm64-zh-cn
+          key: macos-zh-cn-${{ inputs.runner }}
       - name: 检查中文化覆盖
         run: python3 tools/check_localization.py
       - name: macOS 测试
-        run: cargo test --locked --release --target aarch64-apple-darwin
+        run: cargo test --locked --release
       - name: 编译 macOS 版本
         run: cargo build --locked --release --bin ag_unlocker --target aarch64-apple-darwin
       - name: 签名、打包与启动检查
