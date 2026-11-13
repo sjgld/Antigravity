@@ -34,48 +34,33 @@ pub const BAD: Color32 = Color32::from_rgb(0xE5, 0x63, 0x5F);
 pub const RADIUS: u8 = 10;
 pub const RADIUS_SMALL: u8 = 6;
 
-/// Installs Segoe UI Semibold as the UI face, when the machine has it.
-///
-/// Loaded from the system font directory rather than embedded: Segoe UI is
-/// licensed to Windows, not redistributable, so shipping the file inside the exe
-/// would be a licensing problem. Reading the copy the user already has is not.
-///
-/// egui's own fonts stay behind it as fallbacks, so a glyph Segoe lacks still
-/// renders and a machine without the file (any Linux box, a stripped Windows
-/// image) simply keeps the default face instead of showing nothing.
+/// Embed an OFL-licensed CJK font so Chinese also works on non-Chinese systems.
+/// Keep egui's monospace font first for paths and keys, with CJK as its fallback.
 fn install_font(ctx: &egui::Context) {
-    let dir = std::env::var("WINDIR").unwrap_or_else(|_| "C:\\Windows".to_string());
-    // Semibold first, as asked; plain Segoe UI is the near-miss worth taking
-    // before falling all the way back to Ubuntu-Light.
-    let candidates = ["seguisb.ttf", "segoeui.ttf"];
-    let Some((name, bytes)) = candidates.iter().find_map(|f| {
-        let path = std::path::Path::new(&dir).join("Fonts").join(f);
-        std::fs::read(&path).ok().map(|b| (*f, b))
-    }) else {
-        return;
-    };
-
+    let name = "Noto Sans SC";
     let mut fonts = egui::FontDefinitions::default();
     fonts.font_data.insert(
         name.to_string(),
-        std::sync::Arc::new(egui::FontData::from_owned(bytes)),
+        std::sync::Arc::new(egui::FontData::from_static(include_bytes!(
+            "../../assets/fonts/NotoSansSC-Regular.ttf"
+        ))),
     );
-    // Proportional only. Segoe UI is not a monospaced face, and the two places
-    // that ask for one — the licence key field and the install paths — are
-    // exactly the places where columns lining up is the point.
     fonts
         .families
         .entry(egui::FontFamily::Proportional)
         .or_default()
         .insert(0, name.to_string());
+    fonts
+        .families
+        .entry(egui::FontFamily::Monospace)
+        .or_default()
+        .push(name.to_string());
     ctx.set_fonts(fonts);
 }
 
 /// Applies the theme to a context. Called once at startup.
 ///
-/// egui ships Ubuntu-Light and Hack as its default fonts and both carry the
-/// Cyrillic block, so a Russian UI renders even when `install_font` finds
-/// nothing — verified by running the licence screen, not assumed.
+/// Chinese glyphs come from the bundled font; no system font installation needed.
 pub fn apply(ctx: &egui::Context) {
     install_font(ctx);
 

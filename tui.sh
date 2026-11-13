@@ -8,14 +8,14 @@
 # той же командой скачивает заново, только если вышла новая версия. Без root.
 set -eu
 
-REPO="confeden/Antigravity"
+REPO="sjgld/Antigravity"
 DIR="${XDG_DATA_HOME:-$HOME/.local/share}/agunlocker"
 BIN="$DIR/ag_unlocker"
 
 case "$(uname -m)" in
     x86_64 | amd64) ;;
     *)
-        echo "Antigravity Unlocker собран только для x86-64, а здесь $(uname -m)." >&2
+        echo "此版本仅支持 x86-64，当前架构为 $(uname -m)。" >&2
         exit 1
         ;;
 esac
@@ -31,15 +31,15 @@ VER="${TAG#v}"
 case "$VER" in
     "" | *[!0-9._]*)
         if [ -x "$BIN" ]; then
-            echo "GitHub не ответил — запускаю уже скачанную версию." >&2
+            echo "GitHub 暂无响应，正在启动之前下载的版本。" >&2
         else
-            echo "Не удалось узнать последнюю версию на github.com/$REPO." >&2
+            echo "无法从 github.com/$REPO 获取最新版本。" >&2
             exit 1
         fi
         ;;
     *)
         if [ ! -x "$BIN" ] || [ "$(cat "$BIN.version" 2>/dev/null)" != "$VER" ]; then
-            echo "Скачиваю Antigravity Unlocker $VER…" >&2
+            echo "正在下载 Antigravity 解锁器 $VER…" >&2
             mkdir -p "$DIR"
             TMP=$(mktemp -d)
             trap 'rm -rf "$TMP"' EXIT
@@ -54,7 +54,7 @@ case "$VER" in
                 fi
             done
             if [ -z "$NAME" ]; then
-                echo "В релизе $TAG нет сборки для Linux." >&2
+                echo "版本 $TAG 未提供 Linux 安装包。" >&2
                 exit 1
             fi
             curl -fsSL "https://github.com/$REPO/releases/download/$TAG/AG_${NAME}_linux.tar.gz" |

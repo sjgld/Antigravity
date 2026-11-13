@@ -93,7 +93,7 @@ pub fn run() -> Result<(), String> {
         match bind_all() {
             Ok(listeners) => {
                 if said.is_some() {
-                    crate::dns_forwarder::log_proxy("локальные адреса гейт-хостов заняты");
+                    crate::dns_forwarder::log_proxy("已监听 Google 目标域名的本地地址");
                     crate::gate::set_blocker("door", None);
                 }
                 break listeners;
@@ -101,7 +101,7 @@ pub fn run() -> Result<(), String> {
             Err(blocker) => {
                 if said.as_ref() != Some(&blocker) {
                     crate::dns_forwarder::log_proxy(&format!(
-                        "локальные адреса гейт-хостов не заняты: не занять {}: {} ({}{})",
+                        "无法监听 Google 目标域名的本地地址：无法绑定 {}：{}（{}{}）",
                         blocker.addr,
                         blocker.error,
                         blocker.cause,
@@ -133,7 +133,7 @@ pub fn run() -> Result<(), String> {
         h.join().ok();
     }
     BOUND.store(false, Ordering::Relaxed);
-    Err("слушатели остановились".to_string())
+    Err("监听已停止".to_string())
 }
 
 /// Every listener or none: a door open for one gate host and shut for the other

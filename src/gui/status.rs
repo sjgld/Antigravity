@@ -53,10 +53,10 @@ pub enum Action {
 impl Action {
     pub fn label(self) -> &'static str {
         match self {
-            Action::EnableAll => "Включить всё",
-            Action::Elevate => "Перезапустить от имени администратора",
-            Action::Repair => "Починить",
-            Action::Verify => "Пройти верификацию в браузере",
+            Action::EnableAll => "全部启用",
+            Action::Elevate => "以管理员身份重启",
+            Action::Repair => "修复",
+            Action::Verify => "前往浏览器验证账号",
         }
     }
 }
@@ -247,6 +247,7 @@ fn blocker(relay: Option<&crate::gate::Report>, what: &str) -> Option<crate::gat
 /// A provider's name as it is shown: an acronym stays one, anything else gets
 /// one capital.
 pub fn provider_name(name: &str) -> String {
+    let name = crate::resolvers::display_provider_name(name);
     // The two the pool carries are written the way their owners write them.
     match name {
         "dns-ai.ru" => return "DNS-AI.ru".to_string(),
@@ -266,49 +267,40 @@ pub fn provider_name(name: &str) -> String {
 
 /// The master switch of the bypass: what it is called and what it does.
 pub const BYPASS_TEXT: (&str, &str) = (
-    "Снять ошибку 400 в чате с ИИ",
-    "Сам находит рабочий путь до серверов Google и переключается, если путь \
-     перестал работать — с VPN и без.",
+    "解除 AI 聊天的地区限制（错误 400）",
+    "自动寻找可用的 Google 连接线路；当前线路失效时自动切换，兼容有无 VPN 的环境。",
 );
 
 /// What a switch is called and what it does, in both front ends.
 pub fn switch_text(cap: Cap) -> (&'static str, &'static str) {
     match cap {
         Cap::ClientPatch => (
-            "Вход в аккаунт из-под санкций",
-            "Снимает блокировку входа в Google-аккаунт из санкционного региона.",
+            "解除账号登录限制",
+            "解除受限地区 Google 账号的客户端登录限制。",
         ),
         Cap::Watchdog => (
-            "Автопатч",
-            "Сам накладывает патч на найденный Antigravity — сразу после установки и после каждого обновления, которое его стирает.",
+            "自动补丁",
+            "检测到 Antigravity 安装或更新后，自动重新应用补丁。",
         ),
         Cap::Dns => (
-            "Обход через DNS",
-            "Служба на этом компьютере отвечает на имена двух серверов Google и держит их \
-             разрешающимися через сервисы разблокировки. Без неё обход не работает.",
+            "DNS 解锁",
+            "由本机后台服务接管两个 Google 域名的解析，通过解锁服务提供连接地址。DNS 解锁需要此服务运行。",
         ),
         Cap::LocalProxy => (
-            "Локальный прокси",
-            "Соединения Antigravity с этими двумя серверами идут через посредника внутри \
-             вашего компьютера: он выбирает путь, который реально работает, и переключается \
-             сам. Содержимое не расшифровывается — посредник только передаёт байты.",
+            "本地代理",
+            "Antigravity 通过本机代理连接这两个 Google 服务。代理自动选择可用线路，只转发数据，不解密通信内容。",
         ),
         Cap::GroupProxy => (
-            "Прокси из группы",
-            "Выделенный сервер группы: через него идут только запросы к моделям.",
+            "群组代理",
+            "群组提供的专用服务器，仅转发模型请求。",
         ),
         Cap::OwnProxy => (
-            "Свой HTTP-прокси",
-            "Ваш собственный прокси в разрешённой стране — он всегда пробуется первым. \
-             Формат: логин:пароль@адрес:порт — или просто адрес:порт, если пароля нет, \
-             например ivan:secret@203.0.113.9:3128. Только HTTP-прокси, SOCKS не \
-             подойдёт. Google может не принять прокси из дата-центра даже там.",
+            "自定义 HTTP 代理",
+            "使用你在支持地区的 HTTP 代理，程序会优先尝试。格式：用户名:密码@地址:端口；无需认证时填写 地址:端口，例如 ivan:secret@203.0.113.9:3128。不支持 SOCKS。Google 仍可能拒绝数据中心出口。",
         ),
         Cap::DnsRotation => (
-            "Ротация между серверами",
-            "Включено: запрос идёт ко всем включённым серверам, ответ сверяется \
-             с эталонным резолвером. Выключено: используется только первый \
-             включённый в списке, запасных не будет.",
+            "DNS 服务器轮换",
+            "开启时并行查询所有已启用的服务器，并与参考解析结果核对。关闭时仅使用列表中第一个已启用的服务器，无备用服务器。",
         ),
     }
 }
@@ -320,9 +312,9 @@ pub fn switch_text(cap: Cap) -> (&'static str, &'static str) {
 fn blocked(b: &crate::gate::Blocker, exe: &str) -> Headline {
     let port = b.addr.rsplit(':').next().unwrap_or(&b.addr);
     let effect = match b.what.as_str() {
-        "door" => "Antigravity обращается к Google мимо обхода и получает ошибку 400",
-        "dns" => "подмена адресов не работает и запросы к Google идут медленнее",
-        _ => "обход ошибки 400 работает не полностью",
+        "door" => "Antigravity 未经过解锁服务连接 Google，因此收到错误 400",
+        "dns" => "地址替换未生效，Google 请求速度降低",
+        _ => "地区限制解锁未完全生效",
     };
     // Port 53 held by a service is the one case where the image name is worse
     // than useless: it is `svchost.exe`, which the user cannot act on. What
@@ -333,13 +325,9 @@ fn blocked(b: &crate::gate::Blocker, exe: &str) -> Headline {
     if b.what == "dns" && b.cause == "held" && system_holder {
         return Headline {
             tone: Tone::Action,
-            title: format!("Порт {port} занят системной службой"),
+            title: format!("端口 {port} 被系统服务占用"),
             detail: format!(
-                "Порт {port} держит системная служба Windows, поэтому {effect}. Обычно это \
-                 «Общий доступ к подключению к Интернету (ICS)» — его включают Hyper-V, \
-                 мобильный хот-спот и виртуальные машины. Откройте «Службы», остановите \
-                 «Общий доступ к подключению к Интернету (ICS)» и поставьте тип запуска \
-                 «Отключена». Обход займёт порт сам в течение минуты."
+                "Windows 系统服务占用了端口 {port}，导致{effect}。常见原因是 Hyper-V、移动热点或虚拟机启用的“Internet 连接共享（ICS）”。可在“服务”中停止 ICS 并将启动类型设为“禁用”；解锁服务将在一分钟内重新尝试监听。"
             ),
             action: Some(Action::Repair),
         };
@@ -347,41 +335,34 @@ fn blocked(b: &crate::gate::Blocker, exe: &str) -> Headline {
     let (title, detail) = match b.cause.as_str() {
         "held" => {
             let who = if b.by.is_empty() {
-                "другая программа".to_string()
+                "其他程序".to_string()
             } else {
-                format!("программа «{}»", b.by)
+                format!("程序“{}”", b.by)
             };
             (
-                format!("Порт {port} занят другой программой"),
+                format!("端口 {port} 被其他程序占用"),
                 format!(
-                    "Порт {port} на этом компьютере занимает {who}, поэтому {effect}. Закройте её \
-                     или отключите в ней веб-сервер — обход сам займёт порт в течение минуты. \
-                     Или нажмите «Починить»."
+                    "{who} 占用了本机端口 {port}，导致{effect}。关闭该程序或其 Web 服务后，解锁服务将在一分钟内重新尝试；也可点击“修复”。"
                 ),
             )
         }
         "reserved" => (
-            format!("Windows закрыла порт {port}"),
+            format!("端口 {port} 被 Windows 保留"),
             format!(
-                "Порт {port} зарезервирован системой — так делают Hyper-V, WSL и Docker, — \
-                 поэтому {effect}. Откройте командную строку от имени администратора, выполните \
-                 «net stop winnat», затем «net start winnat» и нажмите «Починить»."
+                "端口 {port} 被系统保留，常见于 Hyper-V、WSL 或 Docker，导致{effect}。以管理员身份打开命令提示符，依次运行 net stop winnat 和 net start winnat，然后点击“修复”。"
             ),
         ),
         "denied" => (
-            "Антивирус блокирует обход".to_string(),
+            "安全软件阻止了解锁服务".to_string(),
             format!(
-                "Антивирус или файрвол не даёт службе обхода открыть порт {port}, поэтому \
-                 {effect}. Добавьте в исключения антивируса файл {} — обход заработает сам в \
-                 течение минуты. Или нажмите «Починить».",
+                "安全软件或防火墙阻止服务监听端口 {port}，导致{effect}。将 {} 加入例外后，服务将在一分钟内重试，也可点击“修复”。",
                 exe_or_default(exe)
             ),
         ),
         _ => (
-            format!("Порт {port} недоступен"),
+            format!("端口 {port} 不可用"),
             format!(
-                "Служба обхода не может открыть порт {port} ({}), поэтому {effect}. Нажмите \
-                 «Починить»; не помогло — {}",
+                "解锁服务无法监听端口 {port}（{}），导致{effect}。请点击“修复”；若仍未解决，{}",
                 b.error,
                 super::report::when_stuck()
             ),
@@ -409,16 +390,16 @@ fn exe_or_default(exe: &str) -> String {
 /// One blocker as a line of the report: what, where, why.
 pub fn blocker_line(b: &crate::gate::Blocker) -> String {
     let what = match b.what.as_str() {
-        "door" => "локальные адреса гейт-хостов",
-        "dns" => "DNS-релей",
-        _ => "локальный прокси",
+        "door" => "Google 目标域名的本地地址",
+        "dns" => "DNS 转发服务",
+        _ => "本地代理",
     };
     let why = match b.cause.as_str() {
-        "held" if !b.by.is_empty() => format!("порт занят программой «{}»", b.by),
-        "held" => "порт занят другой программой".to_string(),
-        "reserved" => "порт зарезервирован Windows (Hyper-V/WSL/Docker)".to_string(),
-        "denied" => "доступ запрещён — антивирус или файрвол".to_string(),
-        _ => "причина не определена".to_string(),
+        "held" if !b.by.is_empty() => format!("端口被程序“{}”占用", b.by),
+        "held" => "端口被其他程序占用".to_string(),
+        "reserved" => "端口被 Windows 保留（Hyper-V/WSL/Docker）".to_string(),
+        "denied" => "访问被拒绝，可能是安全软件或防火墙限制".to_string(),
+        _ => "原因尚未确定".to_string(),
     };
     format!("{what} ({}): {why} — {}", b.addr, b.error)
 }
@@ -429,9 +410,8 @@ pub fn headline(f: &Facts) -> Headline {
     if !f.installs_found && !f.patch_on && !f.bypass_on {
         return Headline {
             tone: Tone::Off,
-            title: "Antigravity не найден".into(),
-            detail: "Установите Antigravity или укажите папку с ним ниже — карандаш рядом с нужной строкой."
-                .into(),
+            title: "未找到 Antigravity".into(),
+            detail: "请先安装 Antigravity，或点击下方对应项目旁的铅笔图标，指定安装文件夹。".into(),
             action: None,
         };
     }
@@ -448,12 +428,9 @@ pub fn headline(f: &Facts) -> Headline {
     if let Some((ago, _)) = verify_due {
         return Headline {
             tone: Tone::Action,
-            title: "Нужна верификация аккаунта Google".into(),
+            title: "需要验证 Google 账号".into(),
             detail: format!(
-                "Google попросил подтвердить аккаунт — {}. Antigravity не всегда показывает \
-                 для этого кнопку. Нажмите кнопку ниже: страница Google откроется в браузере \
-                 по умолчанию — в нём должен быть выполнен вход в этот же аккаунт. После \
-                 подтверждения отправьте сообщение в Antigravity ещё раз.",
+                "Google 要求验证账号（{}）。Antigravity 可能未显示验证入口；点击下方按钮将在默认浏览器中打开 Google 验证页面，请使用同一账号。验证后回到 Antigravity 重新发送消息。",
                 ago_text(*ago)
             ),
             action: Some(Action::Verify),
@@ -469,11 +446,9 @@ pub fn headline(f: &Facts) -> Headline {
     if let Some((ago, _)) = unauthorized {
         return Headline {
             tone: Tone::Action,
-            title: "Antigravity нужно перезайти в аккаунт".into(),
+            title: "需要重新登录 Antigravity".into(),
             detail: format!(
-                "Google отвечает ошибкой 401 — {}: учётные данные Antigravity перестали \
-                 совпадать. Выйдите из аккаунта в Antigravity и войдите заново. Обход эту \
-                 ошибку не исправит.",
+                "Google 返回错误 401（{}），Antigravity 的登录凭据已失效。请退出账号后重新登录，解锁功能无法修复此错误。",
                 ago_text(ago)
             ),
             action: None,
@@ -487,15 +462,13 @@ pub fn headline(f: &Facts) -> Headline {
         let which = if model.is_empty() {
             String::new()
         } else {
-            format!(" для модели «{model}»")
+            format!("（模型：{model}）")
         };
         return Headline {
             tone: Tone::Action,
-            title: "Серверы Google перегружены".into(),
+            title: "Google 服务器繁忙".into(),
             detail: format!(
-                "Google отвечает ошибкой 503 — {}: нет свободных мощностей{which}. Обход тут ни \
-                 при чём — запрос до Google дошёл. Рекомендуется выбрать в Antigravity другую \
-                 модель или повторить позже.",
+                "Google 返回错误 503（{}），当前没有可用容量{which}。请求已到达 Google，说明连接已建立。请在 Antigravity 中换一个模型或稍后重试。",
                 ago_text(*ago)
             ),
             action: None,
@@ -508,9 +481,8 @@ pub fn headline(f: &Facts) -> Headline {
     if !f.admin && (!f.bypass_on || service_broken) {
         return Headline {
             tone: Tone::Action,
-            title: "Нужны права администратора".into(),
-            detail: "Без них обход ошибки 400 не установить и не починить. Разблокировка входа \
-                     работает и так."
+            title: "需要管理员权限".into(),
+            detail: "安装或修复错误 400 的解锁服务需要管理员权限；客户端登录补丁不受此限制。"
                 .into(),
             action: Some(Action::Elevate),
         };
@@ -518,18 +490,18 @@ pub fn headline(f: &Facts) -> Headline {
 
     if !f.patch_on || !f.bypass_on {
         let what = match (f.patch_on, f.bypass_on) {
-            (false, false) => "Разблокировка входа и обход ошибки 400 выключены.",
-            (false, true) => "Разблокировка входа выключена.",
-            _ => "Обход ошибки 400 выключен.",
+            (false, false) => "登录补丁和地区限制解锁均未启用。",
+            (false, true) => "登录补丁未启用。",
+            _ => "地区限制解锁未启用。",
         };
         let closes = if f.patch_on {
             ""
         } else {
-            " Antigravity закроется на пару секунд."
+            " Antigravity 将暂时关闭几秒。"
         };
         return Headline {
             tone: Tone::Off,
-            title: "Включено не всё".into(),
+            title: "尚未全部启用".into(),
             detail: format!("{what}{closes}"),
             action: Some(Action::EnableAll),
         };
@@ -539,13 +511,13 @@ pub fn headline(f: &Facts) -> Headline {
         return Headline {
             tone: Tone::Action,
             title: if !f.relay_running {
-                "Служба обхода не работает".into()
+                "解锁服务未运行".into()
             } else if f.relay_outdated {
-                "Служба обхода устарела".into()
+                "解锁服务版本过旧".into()
             } else {
-                "Служба обхода работает не полностью".into()
+                "解锁服务未完全正常运行".into()
             },
-            detail: "Без неё ошибка 400 не обходится. Кнопка переустановит и запустит её.".into(),
+            detail: "解决错误 400 需要后台服务。点击下方按钮将重新安装并启动服务。".into(),
             action: Some(Action::Repair),
         };
     }
@@ -567,12 +539,9 @@ pub fn headline(f: &Facts) -> Headline {
             Some(true) => {
                 return Headline {
                     tone: Tone::Action,
-                    title: "Антивирус или файрвол не пропускает обход".into(),
+                    title: "安全软件或防火墙阻止了解锁服务连接".into(),
                     detail: format!(
-                        "Служба обхода уже несколько минут не может соединиться ни с одним \
-                         сервером, хотя у других программ интернет есть. Так бывает, когда её \
-                         блокирует антивирус или файрвол. Добавьте в исключения антивируса и в \
-                         разрешённые программы файрвола файл {} и нажмите «Починить».",
+                        "其他程序能联网，但解锁服务已连续数分钟无法连接任何服务器，可能受到安全软件或防火墙限制。可将 {} 加入安全软件例外及防火墙允许列表，然后点击“修复”。",
                         exe_or_default(&f.relay_exe)
                     ),
                     action: Some(Action::Repair),
@@ -581,11 +550,8 @@ pub fn headline(f: &Facts) -> Headline {
             Some(false) => {
                 return Headline {
                     tone: Tone::Off,
-                    title: "Нет подключения к интернету".into(),
-                    detail: "Ни служба обхода, ни анлокер не могут соединиться с серверами в \
-                             интернете. Проверьте подключение. Если интернет есть — антивирус \
-                             или файрвол мог заблокировать обе программы: добавьте их в \
-                             исключения."
+                    title: "无法连接互联网".into(),
+                    detail: "解锁器和后台服务均无法连接互联网。请检查网络；若其他程序能联网，请检查安全软件或防火墙是否限制了这两个程序。"
                         .into(),
                     action: None,
                 }
@@ -610,11 +576,9 @@ pub fn headline(f: &Facts) -> Headline {
         if ago > FIXING_FOR {
             return Headline {
                 tone: Tone::Wait,
-                title: "Нужна проверка".into(),
+                title: "等待验证连接".into(),
                 detail: format!(
-                    "Последний раз была ошибка 400 — {}, и после неё модель не отвечала. \
-                     Напишите что-нибудь в Antigravity: если ошибка повторится, обход её поймает \
-                     и сам сменит путь.",
+                    "最近一次错误 400 出现在 {}，此后尚未收到模型回复。请在 Antigravity 中发送一条消息；如果错误再次出现，程序会自动尝试其他线路。",
                     ago_text(ago)
                 ),
                 action: None,
@@ -623,11 +587,9 @@ pub fn headline(f: &Facts) -> Headline {
         if lines >= STUCK_LINES {
             return Headline {
                 tone: Tone::Action,
-                title: "Ошибка 400 повторяется".into(),
+                title: "持续出现错误 400".into(),
                 detail: format!(
-                    "Последняя — {}. Обход перебирает пути сам, но ни один пока не сработал. \
-                     Если у вас включён VPN или прокси, попробуйте выключить его или сменить сервер, \
-                     и отправьте сообщение ещё раз. Не помогло — {}",
+                    "最近一次发生在 {}。程序正在尝试候选线路，但尚未找到可用线路。如已启用 VPN 或代理，可尝试切换节点后重新发送消息；若仍未解决，{}",
                     ago_text(ago),
                     super::report::when_stuck()
                 ),
@@ -636,24 +598,22 @@ pub fn headline(f: &Facts) -> Headline {
         }
         let detail = match &f.answered {
             Some(a) if a.bypassed => format!(
-                "Ошибка 400 — {}. Antigravity обратился к Google мимо обхода; через минуту его \
-                 запросы пойдут через обход. Отправьте сообщение ещё раз — не помогло, \
-                 перезапустите Antigravity.",
+                "错误 400（{}）：Antigravity 未经过解锁服务连接 Google。服务将在一分钟内调整线路，请重新发送消息；若仍失败，请重启 Antigravity。",
                 ago_text(ago)
             ),
             Some(a) if !a.acted.is_empty() => format!(
-                "Ошибка 400 — {}. {}. Отправьте сообщение ещё раз.",
+                "错误 400（{}）。{}。请重新发送消息。",
                 ago_text(ago),
                 capitalise(&a.acted)
             ),
             _ => format!(
-                "Ошибка 400 — {}. Обход её видит и перестраивается. Отправьте сообщение ещё раз.",
+                "错误 400（{}）。解锁服务已检测到问题，正在调整线路，请重新发送消息。",
                 ago_text(ago)
             ),
         };
         return Headline {
             tone: Tone::Fixing,
-            title: "Чиним".into(),
+            title: "正在修复".into(),
             detail,
             action: None,
         };
@@ -664,12 +624,12 @@ pub fn headline(f: &Facts) -> Headline {
             .route
             .as_deref()
             .filter(|r| !r.is_empty())
-            .map(|r| format!(" · путь: {r}"))
+            .map(|r| format!(" · 线路：{r}"))
             .unwrap_or_default();
         return Headline {
             tone: Tone::Ok,
-            title: "Работает".into(),
-            detail: format!("Модель ответила {}{route}.", ago_text(ago)),
+            title: "连接正常".into(),
+            detail: format!("模型已回复：{}{route}。", ago_text(ago)),
             action: None,
         };
     }
@@ -677,18 +637,16 @@ pub fn headline(f: &Facts) -> Headline {
     if !f.relay_reporting {
         return Headline {
             tone: Tone::Wait,
-            title: "Служба запускается".into(),
-            detail: "Это занимает до минуты. Потом напишите что-нибудь в Antigravity.".into(),
+            title: "后台服务正在启动".into(),
+            detail: "启动最多需要一分钟，完成后请在 Antigravity 中发送一条消息。".into(),
             action: None,
         };
     }
 
     Headline {
         tone: Tone::Wait,
-        title: "Всё включено".into(),
-        detail: "Напишите что-нибудь в чат Antigravity — здесь появится подтверждение, что модель \
-                 ответила."
-            .into(),
+        title: "已全部启用".into(),
+        detail: "请在 Antigravity 聊天中发送一条消息。收到模型回复后，这里会显示验证结果。".into(),
         action: None,
     }
 }
@@ -705,25 +663,17 @@ fn capitalise(s: &str) -> String {
 pub fn ago_text(d: Duration) -> String {
     let secs = d.as_secs();
     if secs < 15 {
-        return "только что".to_string();
+        return "刚刚".to_string();
     }
     if secs < 60 {
-        return format!(
-            "{} {} назад",
-            secs,
-            plural(secs, "секунду", "секунды", "секунд")
-        );
+        return format!("{} {}前", secs, plural(secs, "秒", "秒", "秒"));
     }
     let mins = secs / 60;
     if mins < 60 {
-        return format!(
-            "{} {} назад",
-            mins,
-            plural(mins, "минуту", "минуты", "минут")
-        );
+        return format!("{} {}前", mins, plural(mins, "分钟", "分钟", "分钟"));
     }
     let hours = mins / 60;
-    format!("{} {} назад", hours, plural(hours, "час", "часа", "часов"))
+    format!("{} {}前", hours, plural(hours, "小时", "小时", "小时"))
 }
 
 /// Russian counts in three forms.
@@ -767,18 +717,14 @@ mod tests {
         let f = Facts {
             refusal: Some((secs(300), 4)),
             answered: Some(Answered {
-                acted: "адреса серверов Google подбираются заново".into(),
+                acted: "正在重新选择 Google 服务器地址".into(),
                 bypassed: false,
             }),
             ..working()
         };
         let h = headline(&f);
         assert_eq!(h.tone, Tone::Fixing);
-        assert!(
-            h.detail.contains("Отправьте сообщение ещё раз"),
-            "{}",
-            h.detail
-        );
+        assert!(h.detail.contains("请重新发送消息"), "{}", h.detail);
     }
 
     #[test]
@@ -786,14 +732,14 @@ mod tests {
         let f = Facts {
             refusal: Some((secs(300), 4)),
             answer: Some(secs(60)),
-            route: Some("встроенный выход".into()),
+            route: Some("内置出口".into()),
             ..working()
         };
         let h = headline(&f);
         assert_eq!(h.tone, Tone::Ok);
-        assert_eq!(h.title, "Работает");
-        assert!(h.detail.contains("1 минуту назад"), "{}", h.detail);
-        assert!(h.detail.contains("встроенный выход"), "{}", h.detail);
+        assert_eq!(h.title, "连接正常");
+        assert!(h.detail.contains("1 分钟前"), "{}", h.detail);
+        assert!(h.detail.contains("内置出口"), "{}", h.detail);
     }
 
     /// Found live: an answer, then a refusal, then quiet. Once the refusal is
@@ -808,7 +754,7 @@ mod tests {
         };
         let h = headline(&f);
         assert_eq!(h.tone, Tone::Wait);
-        assert_eq!(h.title, "Нужна проверка");
+        assert_eq!(h.title, "等待验证连接");
         // And an answer after that same refusal is working again.
         let f = Facts {
             refusal: Some((secs(13 * 60), 0)),
@@ -832,7 +778,7 @@ mod tests {
     fn set_up_and_unproven_asks_for_a_message_and_claims_nothing() {
         let h = headline(&working());
         assert_eq!(h.tone, Tone::Wait);
-        assert!(!h.detail.contains("работает"), "{}", h.detail);
+        assert!(!h.detail.contains("连接正常"), "{}", h.detail);
         assert_eq!(h.action, None);
     }
 
@@ -848,12 +794,8 @@ mod tests {
         };
         let h = headline(&f);
         assert_eq!(h.tone, Tone::Fixing);
-        assert!(h.detail.contains("мимо обхода"), "{}", h.detail);
-        assert!(
-            h.detail.contains("перезапустите Antigravity"),
-            "{}",
-            h.detail
-        );
+        assert!(h.detail.contains("未经过解锁服务"), "{}", h.detail);
+        assert!(h.detail.contains("重启 Antigravity"), "{}", h.detail);
     }
 
     #[test]
@@ -865,7 +807,7 @@ mod tests {
         let h = headline(&f);
         assert_eq!(h.tone, Tone::Action);
         assert_eq!(
-            h.detail.contains("Сохранить отчёт"),
+            h.detail.contains("保存诊断报告"),
             super::super::report::ENABLED,
             "{}",
             h.detail
@@ -881,7 +823,7 @@ mod tests {
         };
         let h = headline(&f);
         assert_eq!(h.action, Some(Action::EnableAll));
-        assert!(h.detail.contains("закроется"), "{}", h.detail);
+        assert!(h.detail.contains("暂时关闭"), "{}", h.detail);
         // Only the bypass off: nothing gets closed.
         let f = Facts {
             bypass_on: false,
@@ -889,7 +831,7 @@ mod tests {
         };
         let h = headline(&f);
         assert_eq!(h.action, Some(Action::EnableAll));
-        assert!(!h.detail.contains("закроется"), "{}", h.detail);
+        assert!(!h.detail.contains("暂时关闭"), "{}", h.detail);
     }
 
     #[test]
@@ -922,7 +864,7 @@ mod tests {
             relay_outdated: true,
             ..working()
         };
-        assert_eq!(headline(&f).title, "Служба обхода устарела");
+        assert_eq!(headline(&f).title, "解锁服务版本过旧");
         // Running, current, and still useless: nothing asks it anything.
         let f = Facts {
             rules: false,
@@ -930,7 +872,7 @@ mod tests {
         };
         let h = headline(&f);
         assert_eq!(h.action, Some(Action::Repair));
-        assert_eq!(h.title, "Служба обхода работает не полностью");
+        assert_eq!(h.title, "解锁服务未完全正常运行");
     }
 
     #[test]
@@ -948,31 +890,32 @@ mod tests {
 
     #[test]
     fn russian_counts_in_three_forms() {
-        let minutes = |n| plural(n, "минуту", "минуты", "минут");
-        assert_eq!(minutes(1), "минуту");
-        assert_eq!(minutes(2), "минуты");
-        assert_eq!(minutes(5), "минут");
-        assert_eq!(minutes(11), "минут");
-        assert_eq!(minutes(21), "минуту");
-        assert_eq!(minutes(22), "минуты");
-        assert_eq!(minutes(0), "минут");
+        let minutes = |n| plural(n, "分钟", "分钟", "分钟");
+        assert_eq!(minutes(1), "分钟");
+        assert_eq!(minutes(2), "分钟");
+        assert_eq!(minutes(5), "分钟");
+        assert_eq!(minutes(11), "分钟");
+        assert_eq!(minutes(21), "分钟");
+        assert_eq!(minutes(22), "分钟");
+        assert_eq!(minutes(0), "分钟");
     }
 
     #[test]
     fn an_age_reads_as_a_person_would_say_it() {
-        assert_eq!(ago_text(secs(3)), "только что");
-        assert_eq!(ago_text(secs(22)), "22 секунды назад");
-        assert_eq!(ago_text(secs(61)), "1 минуту назад");
-        assert_eq!(ago_text(secs(9 * 60)), "9 минут назад");
-        assert_eq!(ago_text(secs(2 * 3600 + 5)), "2 часа назад");
-        assert_eq!(ago_text(secs(5 * 3600)), "5 часов назад");
+        assert_eq!(ago_text(secs(3)), "刚刚");
+        assert_eq!(ago_text(secs(22)), "22 秒前");
+        assert_eq!(ago_text(secs(61)), "1 分钟前");
+        assert_eq!(ago_text(secs(9 * 60)), "9 分钟前");
+        assert_eq!(ago_text(secs(2 * 3600 + 5)), "2 小时前");
+        assert_eq!(ago_text(secs(5 * 3600)), "5 小时前");
     }
 
     #[test]
     fn an_acronym_stays_an_acronym_and_everything_else_gets_one_capital() {
         assert_eq!(provider_name("dns-ai.ru"), "DNS-AI.ru");
         assert_eq!(provider_name("eu.geohide.ru"), "eu.GeoHide.ru");
-        assert_eq!(provider_name("свой DNS"), "Свой DNS");
+        assert_eq!(provider_name("自定义 DNS"), "自定义 DNS");
+        assert_eq!(provider_name(crate::resolvers::CUSTOM_NAME), "自定义 DNS");
         assert_eq!(provider_name("dns.example"), "DNS.EXAMPLE");
         // Must not panic on a name the pool could grow later.
         assert_eq!(provider_name(""), "");
@@ -1017,7 +960,7 @@ mod tests {
         };
         let h = headline(&f);
         assert_eq!(h.tone, Tone::Action);
-        assert_eq!(h.title, "Антивирус блокирует обход");
+        assert_eq!(h.title, "安全软件阻止了解锁服务");
         assert!(
             h.detail.contains(r"C:\ProgramData\AGUnlocker\ag_dns.exe"),
             "{}",
@@ -1039,8 +982,8 @@ mod tests {
         };
         let h = headline(&refused);
         assert_eq!(h.tone, Tone::Action);
-        assert_eq!(h.title, "Порт 443 занят другой программой");
-        assert!(h.detail.contains("«vmware-hostd.exe»"), "{}", h.detail);
+        assert_eq!(h.title, "端口 443 被其他程序占用");
+        assert!(h.detail.contains("“vmware-hostd.exe”"), "{}", h.detail);
         let answering = Facts {
             answer: Some(secs(5)),
             refusal: Some((secs(60), 4)),
@@ -1058,7 +1001,7 @@ mod tests {
             ..working()
         };
         let h = headline(&f);
-        assert_eq!(h.title, "Windows закрыла порт 443");
+        assert_eq!(h.title, "端口 443 被 Windows 保留");
         assert!(h.detail.contains("net stop winnat"), "{}", h.detail);
     }
 
@@ -1072,20 +1015,20 @@ mod tests {
             ..working()
         };
         let h = headline(&blocked);
-        assert_eq!(h.title, "Антивирус или файрвол не пропускает обход");
+        assert_eq!(h.title, "安全软件或防火墙阻止了解锁服务连接");
         assert_eq!(h.action, Some(Action::Repair));
         let offline = Facts {
             cut_off: true,
             net_ok: Some(false),
             ..working()
         };
-        assert_eq!(headline(&offline).title, "Нет подключения к интернету");
+        assert_eq!(headline(&offline).title, "无法连接互联网");
         let unasked = Facts {
             cut_off: true,
             net_ok: None,
             ..working()
         };
-        assert_eq!(headline(&unasked).title, "Всё включено");
+        assert_eq!(headline(&unasked).title, "已全部启用");
     }
 
     /// Google stopped the account: the card says so above everything, red, with
@@ -1128,23 +1071,23 @@ mod tests {
             ..working()
         };
         let h = headline(&busy);
-        assert_eq!(h.title, "Серверы Google перегружены");
+        assert_eq!(h.title, "Google 服务器繁忙");
         assert!(h.detail.contains("gemini-3.8-flash-high"), "{}", h.detail);
-        assert!(h.detail.contains("другую"), "{}", h.detail);
+        assert!(h.detail.contains("换一个"), "{}", h.detail);
 
         let answered = Facts {
             overloaded: Some((secs(60), String::new())),
             answer: Some(secs(10)),
             ..working()
         };
-        assert_ne!(headline(&answered).title, "Серверы Google перегружены");
+        assert_ne!(headline(&answered).title, "Google 服务器繁忙");
 
         let refused_after = Facts {
             overloaded: Some((secs(300), String::new())),
             refusal: Some((secs(30), 4)),
             ..working()
         };
-        assert_ne!(headline(&refused_after).title, "Серверы Google перегружены");
+        assert_ne!(headline(&refused_after).title, "Google 服务器繁忙");
     }
 
     /// A 401 that keeps coming is a credential Google no longer accepts: the
@@ -1156,8 +1099,8 @@ mod tests {
             ..working()
         };
         let h = headline(&bad);
-        assert_eq!(h.title, "Antigravity нужно перезайти в аккаунт");
-        assert!(h.detail.contains("Выйдите"), "{}", h.detail);
+        assert_eq!(h.title, "需要重新登录 Antigravity");
+        assert!(h.detail.contains("退出账号"), "{}", h.detail);
 
         let once = Facts {
             unauthorized: Some((secs(30), 1)),

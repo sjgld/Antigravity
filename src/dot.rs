@@ -63,7 +63,7 @@ pub fn query(
     budget: Duration,
 ) -> Result<Vec<u8>, String> {
     let deadline = Instant::now() + budget;
-    let mut last = "нет адресов".to_string();
+    let mut last = "无可用地址".to_string();
     for ip in ips {
         let now = Instant::now();
         if now >= deadline {
@@ -89,43 +89,43 @@ fn query_one(
     deadline: Instant,
 ) -> Result<Vec<u8>, String> {
     let left = |d: Instant| d.saturating_duration_since(Instant::now());
-    let request = framed(wire).ok_or("запрос слишком длинный")?;
+    let request = framed(wire).ok_or("请求过长")?;
     if left(deadline).is_zero() {
-        return Err(format!("{}: бюджет истёк до соединения", ip));
+        return Err(format!("{}：建立连接前已超时", ip));
     }
     let mut sock = crate::net::connect(
         SocketAddr::new(ip, port),
         left(deadline),
         crate::net::pin_interface(),
     )
-    .map_err(|_| format!("{}: нет соединения", ip))?;
+    .map_err(|_| format!("{}：未建立连接", ip))?;
     sock.set_nodelay(true).ok();
 
-    let name = ServerName::try_from(host.to_string())
-        .map_err(|_| "неверное имя DoT-сервера".to_string())?;
+    let name =
+        ServerName::try_from(host.to_string()).map_err(|_| "DoT 服务器名称无效".to_string())?;
     let mut conn =
-        ClientConnection::new(tls_config(), name).map_err(|e| format!("TLS не настроен: {}", e))?;
+        ClientConnection::new(tls_config(), name).map_err(|e| format!("无法配置 TLS：{}", e))?;
 
     // Driven by hand so the budget covers the whole exchange, not each syscall.
     while conn.is_handshaking() {
         let t = left(deadline);
         if t.is_zero() {
-            return Err(format!("{}: TLS не уложился в бюджет", ip));
+            return Err(format!("{}：TLS 握手超时", ip));
         }
         sock.set_read_timeout(Some(t)).ok();
         sock.set_write_timeout(Some(t)).ok();
         if conn.wants_write() {
             conn.write_tls(&mut sock)
-                .map_err(|_| format!("{}: обрыв при handshake", ip))?;
+                .map_err(|_| format!("{}：握手时连接中断", ip))?;
         }
         if conn.is_handshaking() && conn.wants_read() {
             match conn.read_tls(&mut sock) {
-                Ok(0) => return Err(format!("{}: сервер закрыл handshake", ip)),
+                Ok(0) => return Err(format!("{}：服务器终止握手", ip)),
                 Ok(_) => {
                     conn.process_new_packets()
-                        .map_err(|e| format!("{}: TLS отклонён: {}", ip, e))?;
+                        .map_err(|e| format!("{}：TLS 被拒绝：{}", ip, e))?;
                 }
-                Err(_) => return Err(format!("{}: обрыв при handshake", ip)),
+                Err(_) => return Err(format!("{}：握手时连接中断", ip)),
             }
         }
     }
@@ -133,22 +133,22 @@ fn query_one(
     let mut tls = rustls::Stream::new(&mut conn, &mut sock);
     let t = left(deadline);
     if t.is_zero() {
-        return Err(format!("{}: бюджет истёк", ip));
+        return Err(format!("{}：操作超时", ip));
     }
     tls.sock.set_read_timeout(Some(t)).ok();
     tls.sock.set_write_timeout(Some(t)).ok();
     tls.write_all(&request)
-        .map_err(|_| format!("{}: запрос не ушёл", ip))?;
+        .map_err(|_| format!("{}：请求发送失败", ip))?;
     tls.flush().ok();
 
     let mut len = [0u8; 2];
-    read_exact_by(&mut tls, &mut len, deadline).map_err(|_| format!("{}: нет ответа", ip))?;
+    read_exact_by(&mut tls, &mut len, deadline).map_err(|_| format!("{}：无响应", ip))?;
     let n = u16::from_be_bytes(len) as usize;
     if n < 12 || n > MAX_MESSAGE {
-        return Err(format!("{}: ответ неверной длины", ip));
+        return Err(format!("{}：响应长度无效", ip));
     }
     let mut reply = vec![0u8; n];
-    read_exact_by(&mut tls, &mut reply, deadline).map_err(|_| format!("{}: ответ оборван", ip))?;
+    read_exact_by(&mut tls, &mut reply, deadline).map_err(|_| format!("{}：响应被截断", ip))?;
     // Politely, and best-effort: the answer is already in hand.
     conn.send_close_notify();
     conn.write_tls(&mut sock).ok();

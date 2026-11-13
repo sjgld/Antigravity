@@ -1,8 +1,8 @@
 [Desktop Entry]
 Type=Application
 Version=1.0
-Name=Antigravity Unlocker
-Comment=Разблокировать Antigravity 2.0 / IDE / CLI
+Name=Antigravity 解锁器
+Comment=Antigravity 2.0 / IDE / CLI 地区限制解锁
 # Self-resolving: %k is this .desktop file's own location, so the launcher next to
 # it is found wherever the folder is unpacked. Only the %k field code is used (no
 # other % sequences, which a .desktop Exec parser would mangle); a file:// prefix

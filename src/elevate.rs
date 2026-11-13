@@ -52,12 +52,12 @@ pub fn revert_files(inst: &Path) -> Reverted {
             Ok(true) => out.files += 1,
             Ok(false) => out
                 .warnings
-                .push(format!("{label}: бэкапа нет, снят только маркер")),
+                .push(format!("{label}：缺少备份，仅移除补丁标记")),
             Err(e) => out.errors.push(format!("{label}: {e}")),
         }
     }
     if let Err(e) = crate::restore_pristine_asar(&inst.join("resources")) {
-        out.warnings.push(format!("app.asar не восстановлен: {e}"));
+        out.warnings.push(format!("app.asar 还原失败：{e}"));
     }
     out
 }
@@ -199,15 +199,15 @@ fn elevated_output(exe: &Path, flag: &str, inst: &Path) -> std::io::Result<std::
 #[cfg(not(target_os = "windows"))]
 pub fn patch_as_root(inst: &Path) -> Result<Elevated, String> {
     use std::process::Command;
-    let exe = std::env::current_exe().map_err(|e| format!("не найден путь к exe: {e}"))?;
+    let exe = std::env::current_exe().map_err(|e| format!("无法确定程序路径：{e}"))?;
     let out = elevated_output(&exe, PATCH_ROOT_FLAG, inst).map_err(|e| {
         if e.kind() == std::io::ErrorKind::NotFound {
             format!(
-                "установка принадлежит root, а pkexec в системе нет. Выполните в терминале: {}",
+                "安装属于 root，但系统没有 pkexec。请在终端运行：{}",
                 manual_command(inst)
             )
         } else {
-            format!("pkexec не запустился: {e}")
+            format!("pkexec 启动失败：{e}")
         }
     })?;
     let stdout = String::from_utf8_lossy(&out.stdout);
@@ -217,13 +217,13 @@ pub fn patch_as_root(inst: &Path) -> Result<Elevated, String> {
         (_, Err(e)) if !e.is_empty() => Err(e),
         // pkexec's own codes: 126 - the prompt was dismissed or refused, 127 -
         // no agent to show it.
-        (Some(126), _) => Err("пароль не введён — патч не наложен".to_string()),
+        (Some(126), _) => Err("未输入系统密码，补丁未应用".to_string()),
         (Some(127), _) => Err(format!(
-            "окно запроса пароля недоступно. Выполните в терминале: {}",
+            "无法显示系统密码窗口，请在终端运行：{}",
             manual_command(inst)
         )),
         (code, _) => Err(format!(
-            "патч от имени root не удался (код {}): {}",
+            "以 root 身份应用补丁失败（退出码 {}）：{}",
             code.map_or("—".to_string(), |c| c.to_string()),
             String::from_utf8_lossy(&out.stderr).trim()
         )),
@@ -232,7 +232,7 @@ pub fn patch_as_root(inst: &Path) -> Result<Elevated, String> {
 
 #[cfg(target_os = "windows")]
 pub fn patch_as_root(_inst: &Path) -> Result<Elevated, String> {
-    Err("не нужно на Windows".to_string())
+    Err("Windows 无需此操作".to_string())
 }
 
 /// The helper's side, run as root: patch one install, report in lines of
@@ -242,7 +242,7 @@ pub fn run_helper(arg: Option<String>) -> ! {
         .map(std::path::PathBuf::from)
         .filter(|p| p.is_absolute() && p.is_dir())
     else {
-        println!("ERR\tне указана папка установки");
+        println!("ERR\t未指定安装文件夹");
         std::process::exit(2);
     };
     match crate::process_install(&inst) {
@@ -306,15 +306,15 @@ fn parse_report(stdout: &str) -> Result<Elevated, String> {
 #[cfg(not(target_os = "windows"))]
 pub fn unpatch_as_root(inst: &Path) -> Result<Reverted, String> {
     use std::process::Command;
-    let exe = std::env::current_exe().map_err(|e| format!("не найден путь к exe: {e}"))?;
+    let exe = std::env::current_exe().map_err(|e| format!("无法确定程序路径：{e}"))?;
     let out = elevated_output(&exe, UNPATCH_ROOT_FLAG, inst).map_err(|e| {
         if e.kind() == std::io::ErrorKind::NotFound {
             format!(
-                "установка принадлежит root, а pkexec в системе нет. Выполните в терминале: {}",
+                "安装属于 root，但系统没有 pkexec。请在终端运行：{}",
                 manual_command_for(UNPATCH_ROOT_FLAG, inst)
             )
         } else {
-            format!("pkexec не запустился: {e}")
+            format!("pkexec 启动失败：{e}")
         }
     })?;
     match (
@@ -322,13 +322,13 @@ pub fn unpatch_as_root(inst: &Path) -> Result<Reverted, String> {
         parse_reverted(&String::from_utf8_lossy(&out.stdout)),
     ) {
         (Some(0), Some(done)) => Ok(done),
-        (Some(126), _) => Err("пароль не введён — патч не снят".to_string()),
+        (Some(126), _) => Err("未输入系统密码，补丁未撤销".to_string()),
         (Some(127), _) => Err(format!(
-            "окно запроса пароля недоступно. Выполните в терминале: {}",
+            "无法显示系统密码窗口，请在终端运行：{}",
             manual_command_for(UNPATCH_ROOT_FLAG, inst)
         )),
         (code, _) => Err(format!(
-            "снятие патча от имени root не удалось (код {}): {}",
+            "以 root 身份撤销补丁失败（退出码 {}）：{}",
             code.map_or("—".to_string(), |c| c.to_string()),
             String::from_utf8_lossy(&out.stderr).trim()
         )),
@@ -337,7 +337,7 @@ pub fn unpatch_as_root(inst: &Path) -> Result<Reverted, String> {
 
 #[cfg(target_os = "windows")]
 pub fn unpatch_as_root(_inst: &Path) -> Result<Reverted, String> {
-    Err("не нужно на Windows".to_string())
+    Err("Windows 无需此操作".to_string())
 }
 
 /// The helper's side of `unpatch_as_root`, run as root.
@@ -346,7 +346,7 @@ pub fn run_unpatch_helper(arg: Option<String>) -> ! {
         .map(std::path::PathBuf::from)
         .filter(|p| p.is_absolute() && p.is_dir())
     else {
-        println!("ERR\tне указана папка установки");
+        println!("ERR\t未指定安装文件夹");
         std::process::exit(2);
     };
     let done = revert_files(&inst);
@@ -383,11 +383,11 @@ mod tests {
     #[test]
     fn the_unpatch_report_reads_back_and_needs_its_last_line() {
         let done = super::parse_reverted(
-            "FILES\t2\nBAD\tlanguage_server: отказано\nWARN\tapp.asar\nDONE\n",
+            "FILES\t2\nBAD\tlanguage_server: 拒绝访问\nWARN\tapp.asar\nDONE\n",
         )
         .expect("done");
         assert_eq!(done.files, 2);
-        assert_eq!(done.errors, vec!["language_server: отказано".to_string()]);
+        assert_eq!(done.errors, vec!["language_server: 拒绝访问".to_string()]);
         assert_eq!(done.warnings, vec!["app.asar".to_string()]);
         assert!(super::parse_reverted("FILES\t2\n").is_none());
     }
@@ -396,14 +396,14 @@ mod tests {
 
     #[test]
     fn the_helpers_report_reads_back() {
-        let done = parse_report("OK\tAntigravity IDE\nWARN\tоверрайд не снят\nPROXYVAR\t1\t0\n")
+        let done = parse_report("OK\tAntigravity IDE\nWARN\t覆盖设置未移除\nPROXYVAR\t1\t0\n")
             .expect("ok");
         assert_eq!(done.label, "Antigravity IDE");
-        assert_eq!(done.warnings, vec!["оверрайд не снят".to_string()]);
+        assert_eq!(done.warnings, vec!["覆盖设置未移除".to_string()]);
         assert!(done.proxy_var && !done.proxy_var_retryable);
         assert_eq!(
-            parse_report("ERR\tСигнатура не найдена\n").err().as_deref(),
-            Some("Сигнатура не найдена")
+            parse_report("ERR\t未找到补丁特征\n").err().as_deref(),
+            Some("未找到补丁特征")
         );
         assert_eq!(parse_report("").err().as_deref(), Some(""));
     }

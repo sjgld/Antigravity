@@ -459,7 +459,7 @@ pub fn process_install(install: &Path) -> Result<InstallOutcome, String> {
             let _ = fs::remove_dir_all(&app_dir);
         }
         if !extract_asar(&app_asar, &app_dir) {
-            return Err("Ошибка получения доступа к приложению".to_string());
+            return Err("无法访问应用程序".to_string());
         }
     }
 
@@ -488,7 +488,7 @@ pub fn process_install(install: &Path) -> Result<InstallOutcome, String> {
         // patched by <= 2.10.x still carries the override, and leaving it would
         // silently keep that machine on the old host. Menu 1 takes it back out.
         if let Err(e) = endpoint::remove_ide(install) {
-            warnings.push(format!("Прежний оверрайд эндпоинта не снят: {}", e));
+            warnings.push(format!("未能移除旧的端点覆盖设置：{}", e));
         }
         return Ok(InstallOutcome {
             label: "Antigravity IDE",
@@ -515,7 +515,7 @@ pub fn process_install(install: &Path) -> Result<InstallOutcome, String> {
         // settings key, and it outlives a reinstall, so taking it back out
         // matters more, not less.
         if let Err(e) = endpoint::remove_cli() {
-            warnings.push(format!("Прежний {} не снят: {}", endpoint::CLI_ENV_VAR, e));
+            warnings.push(format!("未能移除旧的 {}：{}", endpoint::CLI_ENV_VAR, e));
         }
         return Ok(InstallOutcome {
             label: install_label(install),
@@ -524,17 +524,16 @@ pub fn process_install(install: &Path) -> Result<InstallOutcome, String> {
         });
     }
 
-    Err("Компоненты приложения не найдены".to_string())
+    Err("未找到应用程序组件".to_string())
 }
 
 fn binary_failure_message(summary: &patch_binary::BinarySummary) -> String {
     if summary.total() == 0 {
-        "Бинарник Language Server / CLI не найден в этой установке".to_string()
+        "此安装中未找到 Language Server / CLI 可执行文件".to_string()
     } else if let Some(err) = &summary.last_error {
         err.clone()
     } else {
-        "Сигнатура в Language Server не найдена — вероятно, вышла новая версия Antigravity"
-            .to_string()
+        "未找到语言服务器补丁特征，可能是 Antigravity 已更新，需要新版解锁器".to_string()
     }
 }
 
@@ -605,7 +604,7 @@ fn is_gemini_bin(install: &Path) -> bool {
 
 pub fn install_label(install: &Path) -> &'static str {
     if is_gemini_bin(install) && vscode_extension_installed() {
-        "Antigravity для VS Code"
+        "Antigravity VS Code 扩展"
     } else if install.join("agy.exe").is_file() || install.join("agy").is_file() {
         "Antigravity CLI"
     } else if install.join("Antigravity IDE.exe").exists()
@@ -620,7 +619,10 @@ pub fn install_label(install: &Path) -> &'static str {
 
 fn main() {
     #[cfg(windows)]
-    if env::args_os().nth(1).is_some_and(|a| a == launch_guard::FLAG) {
+    if env::args_os()
+        .nth(1)
+        .is_some_and(|a| a == launch_guard::FLAG)
+    {
         launch_guard::run();
         return;
     }
@@ -692,7 +694,7 @@ fn main() {
         // window does, so it is offered instead of a dead end: on Windows in a
         // console of its own, on Linux only when started from a terminal (a
         // double-clicked launcher has none, and gets the message instead).
-        let note = format!("Окно не открылось ({e}) — работаю в терминале.");
+        let note = format!("无法打开窗口（{e}），已切换至终端模式。");
         #[cfg(target_os = "windows")]
         run_tui(Some(note));
         #[cfg(not(target_os = "windows"))]

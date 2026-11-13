@@ -1105,7 +1105,10 @@ mod tests {
 API Error: {Reason:UNSUPPORTED_LOCATION}
 ";
         assert_eq!(count_refusals(body), 1);
-        assert_eq!(count_refusals(b"PERMISSION_DENIED (code 403): You do not have a valid license"), 0);
+        assert_eq!(
+            count_refusals(b"PERMISSION_DENIED (code 403): You do not have a valid license"),
+            0
+        );
     }
 
     const REFUSAL: &str = "E0901 15:09:24.614939 1 stream_handler.go:101] FAILED_PRECONDITION (code 400): User location is not supported for the API use.\n";
@@ -1394,12 +1397,12 @@ API Error: {Reason:UNSUPPORTED_LOCATION}
     #[ignore = "reads the real Antigravity logs on this machine; run with --ignored"]
     fn reads_what_the_client_actually_logged() {
         let logs = candidate_logs();
-        println!("логов: {}, байт: {}", logs.len(), bytes_of(&logs));
+        println!("日志文件：{}，总字节数：{}", logs.len(), bytes_of(&logs));
         for path in &logs {
             println!("  {}", path.display());
         }
         println!(
-            "последняя region-400 за сутки: {:?}",
+            "最近 24 小时内最后一次 region-400：{:?}",
             newest_refusal(&logs, Duration::from_secs(24 * 3600))
         );
     }

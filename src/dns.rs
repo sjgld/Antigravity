@@ -447,7 +447,7 @@ fn parse_conflicts(output: &str, namespaces: &[&str]) -> Vec<String> {
         }
         let owner = owner.trim();
         let entry = if owner.is_empty() {
-            format!("{} (без метки)", ns)
+            format!("{}（无标签）", ns)
         } else {
             format!("{} ({})", ns, owner)
         };
@@ -519,7 +519,7 @@ const HELPER_LIMIT: Duration = Duration::from_secs(15);
 /// Windows path.
 #[cfg(not(target_os = "windows"))]
 pub fn setup_dns_nrpt() -> Result<DnsOutcome, String> {
-    Err("DNS-слой на Linux пока не портирован".to_string())
+    Err("Linux 暂不支持此 DNS 功能".to_string())
 }
 
 #[cfg(target_os = "windows")]
@@ -591,16 +591,16 @@ pub fn setup_dns_nrpt() -> Result<DnsOutcome, String> {
         adds
     );
 
-    let out = powershell(&cmd).ok_or_else(|| "не удалось запустить PowerShell".to_string())?;
+    let out = powershell(&cmd).ok_or_else(|| "无法启动 PowerShell".to_string())?;
     invalidate_cache();
 
     if !out.status.success() {
         let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
         let lower = stderr.to_lowercase();
         let hint = if lower.contains("denied") || lower.contains("elevation") {
-            "требуются права администратора".to_string()
+            "需要管理员权限".to_string()
         } else if stderr.is_empty() {
-            "PowerShell завершился с ошибкой".to_string()
+            "PowerShell 执行失败".to_string()
         } else {
             stderr
         };
@@ -653,10 +653,7 @@ pub fn outcome_note(o: &DnsOutcome) -> Option<String> {
     // assume the step silently failed.
     if o.stood_down_for_vpn {
         return Some(
-            "  Обнаружен активный VPN, трафик Antigravity идёт через него —\n  \
-             правила DNS не создавались. Запросы идут так, как их настраивает\n  \
-             VPN. Если выход VPN в разрешённом регионе, обход уже работает и\n  \
-             без наших правил; если нет — отключите VPN и запустите пункт 1 снова."
+            "  检测到 VPN，Antigravity 流量正在经过 VPN，未创建 DNS 规则。\n  若 VPN 出口位于支持地区，可直接使用；否则请关闭 VPN 后重新执行选项 1。"
                 .to_string(),
         );
     }
@@ -668,16 +665,10 @@ pub fn outcome_note(o: &DnsOutcome) -> Option<String> {
         lines.push(
             match o.client {
                 egress::ClientEgress::Physical => {
-                    "  VPN активен, но трафик Antigravity идёт мимо него\n  \
-                     (исключён из VPN) — правила DNS созданы: без них\n  \
-                     запросы уходят из заблокированного региона и возвращают\n  \
-                     ошибку 400."
+                    "  VPN 已启用，但 Antigravity 流量绕过 VPN（已被排除）。\n  已创建 DNS 规则，避免请求从受限地区发出而返回错误 400。"
                 }
                 _ => {
-                    "  VPN активен, Antigravity не запущен — проверить, идёт ли\n  \
-                     его трафик через VPN, не удалось. Правила DNS созданы:\n  \
-                     лишние они лишь замедляют на один переход, а недостающие\n  \
-                     дают ошибку 400."
+                    "  VPN 已启用，但 Antigravity 未运行，无法判断其流量是否经过 VPN。\n  已创建 DNS 规则；多一层转发可能略有延迟，缺少规则则可能出现错误 400。"
                 }
             }
             .to_string(),
@@ -686,16 +677,14 @@ pub fn outcome_note(o: &DnsOutcome) -> Option<String> {
 
     if o.probe_gave_up {
         lines.push(
-            "  \x1b[33mПроверка DNS-провайдеров не уложилась в отведённое время —\n  \
-             правила записаны по общему списку. Обычно это значит, что запросы\n  \
-             к DNS блокирует сеть или VPN.\x1b[0m\x1b[92m"
+            "  \x1b[33mDNS 服务检测超时，已使用默认服务器列表创建规则。\n  可能是网络或 VPN 阻止了 DNS 请求。\x1b[0m\x1b[92m"
                 .to_string(),
         );
     }
 
     if !o.taken_over.is_empty() {
         lines.push(format!(
-            "  Забраны правила DNS у другой программы (мешали патчу):\n  {}",
+            "  已接管其他程序创建的冲突 DNS 规则：\n  {}",
             o.taken_over.join("\n  ")
         ));
     }
@@ -703,11 +692,9 @@ pub fn outcome_note(o: &DnsOutcome) -> Option<String> {
     if o.via_relay {
         lines.push(
             if background::is_running() {
-                "  Резолвинг идёт через фоновый релей — адреса берутся с канала\n  \
-                 провайдера и обновляются по TTL."
+                "  域名解析由后台转发服务处理，通过物理网络获取地址，并按 TTL 更新。"
             } else {
-                "  \x1b[33mФоновый релей включён, но не запущен — временно работает\n  \
-                 прямой путь.\x1b[0m\x1b[92m"
+                "  \x1b[33m后台转发已启用但尚未启动，暂时使用直连。\x1b[0m\x1b[92m"
             }
             .to_string(),
         );
@@ -727,14 +714,11 @@ pub fn outcome_note(o: &DnsOutcome) -> Option<String> {
 /// The `hosts`-pinning half of the message, used when the relay is off.
 fn fallback_note(o: &DnsOutcome) -> Option<String> {
     if let Some(e) = &o.pin_error {
-        return Some(format!(
-            "  \x1b[33mНе удалось закрепить адреса: {}\x1b[0m\x1b[92m",
-            e
-        ));
+        return Some(format!("  \x1b[33m无法固定解析地址：{}\x1b[0m\x1b[92m", e));
     }
     if !o.pinned.is_empty() {
         return Some(format!(
-            "  VPN активен — {} адресов получено напрямую через провайдера и закреплено.",
+            "  VPN 已启用，已通过物理网络获取并固定 {} 个地址。",
             o.pinned.len()
         ));
     }
@@ -743,8 +727,7 @@ fn fallback_note(o: &DnsOutcome) -> Option<String> {
     // in one step reads as two different findings.
     if o.vpn_active {
         return Some(
-            "  \x1b[33mРезолвер не подменяет адреса даже с канала провайдера —\n  \
-             проверьте, что DNS-провайдеры доступны.\x1b[0m\x1b[92m"
+            "  \x1b[33m即使通过物理网络，DNS 服务器仍未提供替换地址。请检查 DNS 服务是否可用。\x1b[0m\x1b[92m"
                 .to_string(),
         );
     }
@@ -811,12 +794,12 @@ mod tests {
             taken_over: vec!["cloudcode-pa.googleapis.com (OTHER)".to_string()],
             probe_gave_up: true,
         };
-        let note = outcome_note(&o).expect("должно быть сообщение");
+        let note = outcome_note(&o).expect("应返回提示信息");
         assert!(note.contains("VPN"), "{}", note);
-        assert!(note.contains("правила DNS не создавались"), "{}", note);
+        assert!(note.contains("未创建 DNS 规则"), "{}", note);
         // The relay/probe/takeover lines belong to a run that wrote rules.
-        assert!(!note.contains("релей"), "{}", note);
-        assert!(!note.contains("Забраны правила"), "{}", note);
+        assert!(!note.contains("转发"), "{}", note);
+        assert!(!note.contains("已接管"), "{}", note);
     }
 
     /// The G29 case, from the other side: a tunnel is up, the client was
@@ -837,16 +820,16 @@ mod tests {
             probe_gave_up: false,
         };
 
-        let excluded = outcome_note(&with(egress::ClientEgress::Physical)).expect("сообщение");
-        assert!(excluded.contains("мимо него"), "{}", excluded);
+        let excluded = outcome_note(&with(egress::ClientEgress::Physical)).expect("提示信息");
+        assert!(excluded.contains("绕过 VPN"), "{}", excluded);
         assert!(excluded.contains("400"), "{}", excluded);
-        assert!(!excluded.contains("не создавались"), "{}", excluded);
+        assert!(!excluded.contains("未创建"), "{}", excluded);
 
         // Antigravity was not running: the rules still go in, and the note says
         // the measurement is what is missing rather than claiming either way.
-        let unknown = outcome_note(&with(egress::ClientEgress::Unknown)).expect("сообщение");
-        assert!(unknown.contains("не запущен"), "{}", unknown);
-        assert!(!unknown.contains("не создавались"), "{}", unknown);
+        let unknown = outcome_note(&with(egress::ClientEgress::Unknown)).expect("提示信息");
+        assert!(unknown.contains("未运行"), "{}", unknown);
+        assert!(!unknown.contains("未创建"), "{}", unknown);
 
         // No tunnel at all: nothing to explain, so nothing is said about one.
         let plain = DnsOutcome {
@@ -1022,7 +1005,7 @@ mod tests {
             assert!(pinned, "a tunnel is up but nothing was pinned");
         } else {
             assert!(!pinned, "no tunnel, so the block should not be there");
-            println!("(без VPN пиннинг не нужен — правила NRPT справляются сами)");
+            println!("（未启用 VPN，无需固定地址，NRPT 规则即可处理）");
         }
     }
 }

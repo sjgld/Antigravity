@@ -1,7 +1,7 @@
 # Antigravity Unlocker - terminal mode in one command (Windows 10/11):
 #
-#   PowerShell:  irm https://raw.githubusercontent.com/confeden/Antigravity/main/tui.ps1 | iex
-#   cmd:         powershell -NoProfile -c "irm https://raw.githubusercontent.com/confeden/Antigravity/main/tui.ps1 | iex"
+#   PowerShell:  irm https://raw.githubusercontent.com/sjgld/Antigravity/zh-CN/tui.ps1 | iex
+#   cmd:         powershell -NoProfile -c "irm https://raw.githubusercontent.com/sjgld/Antigravity/zh-CN/tui.ps1 | iex"
 #
 # Fetches the latest release from GitHub into %LOCALAPPDATA%\AGUnlocker\AG.exe and
 # runs it right in this console. Running the same command again downloads only
@@ -15,6 +15,12 @@
 
 # In a script block, so `iex` leaves nothing behind in the caller's session.
 & {
+    # ASCII source keeps both PowerShell 5.1 file loading and irm | iex safe.
+    function Zh([string]$Text) {
+        [regex]::Replace($Text, '\u([0-9a-fA-F]{4})', {
+            param($m) [string][char][Convert]::ToInt32($m.Groups[1].Value, 16)
+        })
+    }
     $ErrorActionPreference = 'Stop'
     # Invoke-WebRequest's progress bar makes a 15 MB download take minutes on
     # Windows PowerShell 5.1.
@@ -23,7 +29,7 @@
     [Net.ServicePointManager]::SecurityProtocol =
         [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
-    $repo = 'confeden/Antigravity'
+    $repo = 'sjgld/Antigravity'
     $dir = Join-Path $env:LOCALAPPDATA 'AGUnlocker'
     $exe = Join-Path $dir 'AG.exe'
     $stamp = "$exe.version"
@@ -40,10 +46,10 @@
     $ver = if ($tag) { $tag.TrimStart('v') } else { '' }
 
     if ($ver -notmatch '^[0-9._]+$') {
-        if (-not (Test-Path $exe)) { throw "Could not find the latest version on github.com/$repo." }
-        Write-Host 'GitHub did not answer - starting the copy downloaded before.'
+        if (-not (Test-Path $exe)) { throw (Zh '\u65e0\u6cd5\u4ece github.com/{0} \u83b7\u53d6\u6700\u65b0\u7248\u672c\u3002') -f $repo }
+        Write-Host (Zh 'GitHub \u6682\u65e0\u54cd\u5e94\uff0c\u6b63\u5728\u542f\u52a8\u4e4b\u524d\u4e0b\u8f7d\u7684\u7248\u672c\u3002')
     } elseif (-not (Test-Path $exe) -or (Get-Content $stamp -ErrorAction SilentlyContinue) -ne $ver) {
-        Write-Host "Downloading Antigravity Unlocker $ver ..."
+        Write-Host ((Zh '\u6b63\u5728\u4e0b\u8f7d Antigravity \u89e3\u9501\u5668 {0}\u2026') -f $ver)
         New-Item -ItemType Directory -Force $dir | Out-Null
         # The tag spells a fourth number with a dot (v2.24.0.1), the asset with an
         # underscore (AG_2.24.0_1.exe): try both.
@@ -56,7 +62,7 @@
                 break
             } catch {}
         }
-        if (-not $got) { throw "No AG_$ver.exe in release $tag." }
+        if (-not $got) { throw ((Zh '\u7248\u672c {1} \u4e2d\u672a\u627e\u5230 AG_{0}.exe\u3002') -f $ver, $tag) }
         try {
             Move-Item -Force "$exe.part" $exe
             Set-Content -Path $stamp -Value $ver
@@ -65,7 +71,7 @@
             # replaced now, but it can still be started.
             Remove-Item -Force "$exe.part" -ErrorAction SilentlyContinue
             if (-not (Test-Path $exe)) { throw }
-            Write-Host 'The previous version is running and could not be replaced - starting it.'
+            Write-Host (Zh '\u65e7\u7248\u672c\u4ecd\u5728\u8fd0\u884c\uff0c\u6682\u65f6\u65e0\u6cd5\u66ff\u6362\uff0c\u5c06\u542f\u52a8\u73b0\u6709\u7248\u672c\u3002')
         }
     }
 

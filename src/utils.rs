@@ -345,7 +345,7 @@ pub fn set_clipboard_text(text: &str) -> bool {
 /// point is a file the user can find and attach without being told a path, and
 /// a Desktop collecting `отчёт (7).txt` is its own kind of mess. Pressing the
 /// button again replaces it.
-pub const REPORT_FILE: &str = "Antigravity Unlocker - отчёт.txt";
+pub const REPORT_FILE: &str = "Antigravity 解锁器 - 诊断报告.txt";
 
 /// The user's Desktop.
 ///
@@ -720,17 +720,17 @@ mod tests {
     fn a_saved_report_is_what_notepad_expects() {
         let dir = std::env::temp_dir().join("ag_unlocker_report_test");
         std::fs::create_dir_all(&dir).expect("temp dir");
-        let path = save_text_file(&dir, REPORT_FILE, "Отчёт\nвторая строка\n").expect("written");
+        let path = save_text_file(&dir, REPORT_FILE, "报告\n第二行\n").expect("written");
         assert_eq!(path.file_name().and_then(|f| f.to_str()), Some(REPORT_FILE));
         let raw = std::fs::read(&path).expect("read back");
         let text = String::from_utf8(raw).expect("utf-8");
         #[cfg(target_os = "windows")]
         {
             assert!(text.starts_with('\u{feff}'), "no BOM");
-            assert!(text.contains("Отчёт\r\nвторая"), "no CRLF: {text:?}");
+            assert!(text.contains("报告\r\n第二行"), "no CRLF: {text:?}");
         }
         #[cfg(not(target_os = "windows"))]
-        assert_eq!(text, "Отчёт\nвторая строка\n");
+        assert_eq!(text, "报告\n第二行\n");
         std::fs::remove_dir_all(&dir).ok();
     }
 

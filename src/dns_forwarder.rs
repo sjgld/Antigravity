@@ -355,7 +355,7 @@ const REPEAT_RUN: u32 = 50;
 /// happened, and a delayed first line is a log that lies about when.
 fn collapse_repeat(line: &str) -> (Option<String>, bool) {
     static RUN: Mutex<Option<(String, u32, Instant)>> = Mutex::new(None);
-    let tally = |n: u32| format!("↑ то же самое ещё {} раз", n);
+    let tally = |n: u32| format!("↑ 相同信息又出现 {} 次", n);
     let Ok(mut g) = RUN.lock() else {
         return (None, true);
     };
@@ -510,15 +510,11 @@ fn measure_vpn_exit() {
                     *c = country.clone();
                 }
                 log(&match permitted {
-                    Some(true) => format!(
-                        "VPN выходит в {} — его можно использовать как маршрут",
-                        country
-                    ),
-                    Some(false) => format!(
-                        "VPN выходит в {} — там ошибка 400, этот маршрут не используется",
-                        country
-                    ),
-                    None => "страну выхода VPN узнать не удалось".to_string(),
+                    Some(true) => format!("VPN 出口位于 {}，可作为候选线路", country),
+                    Some(false) => {
+                        format!("VPN 出口位于 {}，该出口返回错误 400，暂不使用", country)
+                    }
+                    None => "无法确定 VPN 出口地区".to_string(),
                 });
             }
             MEASURING_EXIT.store(false, Ordering::SeqCst);
@@ -618,17 +614,17 @@ fn warm_forever() {
             };
             if stand_down != resolvers::tunnel_carries_client() {
                 log(if stand_down {
-                    "Antigravity ходит через VPN мимо обхода — адреса отдаются как у VPN"
+                    "Antigravity 正通过 VPN 连接，未经过解锁服务，将保留 VPN 的解析地址"
                 } else {
-                    "подмена адресов снова включена"
+                    "已重新启用地址替换"
                 });
             }
             resolvers::set_vpn_active(stand_down);
             if tunnel != was {
                 log(if tunnel {
-                    "VPN поднят — соединения службы с сервисами разблокировки идут мимо него, через провайдера"
+                    "VPN 已启用，后台服务将绕过 VPN，通过物理网络连接解锁服务"
                 } else {
-                    "VPN отключён"
+                    "VPN 已关闭"
                 });
             }
             if tunnel && (!was || proxy::vpn_exit().is_none()) {
@@ -657,7 +653,7 @@ fn warm_forever() {
             since_upstream = PROBE_HEALTHY_EVERY;
             since_exits = PROBE_HEALTHY_EVERY;
             since_direct = PROBE_HEALTHY_EVERY;
-            log_proxy("сеть изменилась — что работает, выясняется заново");
+            log_proxy("网络发生变化，正在重新检测可用线路");
         }
         // The client logs are watched on a thread of their own every two
         // seconds (`watch_client_logs`), not here: a refusal costs the user
@@ -771,7 +767,7 @@ fn answer_log(hits: &[(std::path::PathBuf, ls_log::Tally)]) {
             // not route at all is a different story from one on a gate host,
             // and the line said neither (three field reports, 2026-09-21).
             log_proxy(&format!(
-                "region-400 x{} в {}{} — Antigravity упёрся в гейт",
+                "检测到 region-400，共 {} 次，位置 {}{}；Antigravity 遇到地区限制",
                 t.refusals,
                 file,
                 t.refused_host
@@ -854,27 +850,27 @@ fn on_drops(count: usize, at: Instant, host: Option<&str>, answered_after: bool)
     }
     let streak = DROP_STREAK.fetch_add(count, Relaxed) + count;
     let carried = routes::attribute_tunnel(at, host);
-    let label = carried.map_or("не наш", |(k, _)| k.label());
+    let label = carried.map_or("非本工具线路", |(k, _)| k.label());
     if streak < DROP_BENCH_AT {
         log_proxy(&format!(
-            "обрыв соединения при ответе модели (маршрут «{label}») — первый, повтор клиента идёт тем же путём"
+            "模型回复时连接中断（线路“{label}”），首次发生，客户端将沿原线路重试"
         ));
         return;
     }
     let Some((kind, _)) = carried else {
         log_proxy(&format!(
-            "обрыв соединения при ответе модели {streak} раз подряд, но не через наш маршрут — переключать нечего"
+            "模型回复时连续断开 {streak} 次，但未经过本工具线路，无可切换的连接"
         ));
         return;
     };
     match routes::bench_dropping(kind) {
         Some(bench) => log_proxy(&format!(
-            "маршрут «{}» рвёт соединение при ответе модели {streak} раз подряд — отложен на {} мин, следующее соединение пойдёт другим",
+            "线路“{}”在模型回复时连续断开 {streak} 次，将暂缓使用 {} 分钟，下一次连接改用其他线路",
             kind.label(),
             bench.as_secs() / 60
         )),
         None => log_proxy(&format!(
-            "обрыв соединения при ответе модели {streak} раз подряд по «{}», но маршрут уже отложен или недавно отвечал — не тронут",
+            "线路“{}”在模型回复时连续断开 {streak} 次，但该线路已暂缓或近期仍有回复，保持现状",
             kind.label()
         )),
     }
@@ -899,7 +895,7 @@ fn newest(a: Option<Duration>, b: Option<Duration>) -> Option<Duration> {
 /// a route answering and refusing in the same minute, over and over.
 fn connection_note(kind: routes::Kind, id: u64, shape: Option<routes::Shape>) -> String {
     let Some(s) = shape else {
-        return format!("region-400 по соединению #{} «{}»", id, kind.label());
+        return format!("连接 #{}“{}”收到 region-400", id, kind.label());
     };
     let open = routes::open_counts();
     let others: Vec<String> = routes::ALL
@@ -910,18 +906,18 @@ fn connection_note(kind: routes::Kind, id: u64, shape: Option<routes::Shape>) ->
         .collect();
     let what = match s.answered_ago {
         Some(ago) => format!(
-            "то же соединение, по которому шёл ответ ({} с назад, {} КБ)",
+            "此连接曾传输模型回复（{} 秒前，{} KB）",
             ago.as_secs(),
             s.to_client / 1024
         ),
         None => format!(
-            "ответов не нёс, открыто {} с, {} КБ",
+            "此连接未传输回复，已建立 {} 秒，累计 {} KB",
             s.age.as_secs(),
             s.to_client / 1024
         ),
     };
     format!(
-        "region-400 по соединению #{} «{}»: {}; открыто: {}",
+        "连接 #{}“{}”收到 region-400：{}；已建立：{}",
         id,
         kind.label(),
         what,
@@ -937,7 +933,10 @@ fn on_refusals(count: usize, at: Instant, host: Option<&str>) {
             let shape = routes::tunnel_shape(tunnel);
             log_proxy(&connection_note(kind, tunnel, shape));
             let blamed = routes::blame(kind);
-            if matches!(blamed, routes::Blamed::Benched(_) | routes::Blamed::AlreadyBenched) {
+            if matches!(
+                blamed,
+                routes::Blamed::Benched(_) | routes::Blamed::AlreadyBenched
+            ) {
                 if let Some((host, ip)) = routes::dns_endpoint(tunnel) {
                     crate::dns_route::feedback(&host, ip, false);
                 }
@@ -955,12 +954,12 @@ fn on_refusals(count: usize, at: Instant, host: Option<&str>) {
             match blamed {
                 routes::Blamed::Benched(penalty) => {
                     log_proxy(&format!(
-                        "маршрут «{}» нёс region-400 — отложен на {}, его соединения закрыты",
+                        "线路“{}”收到 region-400，暂缓使用 {}，已关闭相关连接",
                         kind.label(),
                         human_minutes(penalty)
                     ));
                     acted.push(format!(
-                        "маршрут «{}» отложен на {}, следующее соединение пойдёт другим",
+                        "线路“{}”暂缓使用 {}，下一次连接改用其他线路",
                         kind.label(),
                         human_minutes(penalty)
                     ));
@@ -972,19 +971,19 @@ fn on_refusals(count: usize, at: Instant, host: Option<&str>) {
                 // loses one halfway through.
                 routes::Blamed::Proven(ago) => {
                     log_proxy(&format!(
-                        "маршрут «{}» нёс region-400, но ответ модели был {} с назад — оставлен как есть",
+                        "线路“{}”收到 region-400，但 {} 秒前仍有模型回复，保持现状",
                         kind.label(),
                         ago.as_secs()
                     ));
                     acted.push(format!(
-                        "по «{}» модель отвечала {} с назад — маршрут и его соединения не тронуты",
+                        "线路“{}”在 {} 秒前收到模型回复，保留线路及现有连接",
                         kind.label(),
                         ago.as_secs()
                     ));
                 }
                 routes::Blamed::AlreadyBenched => {
                     acted.push(format!(
-                        "соединения через «{}» закрыты — повтор пойдёт другим путём",
+                        "已关闭经由“{}”的连接，重试将使用其他线路",
                         kind.label()
                     ));
                 }
@@ -994,7 +993,7 @@ fn on_refusals(count: usize, at: Instant, host: Option<&str>) {
                 // client closes (D32).
                 routes::Blamed::Streaming { idle, to_client } => {
                     log_proxy(&format!(
-                        "маршрут «{}» нёс region-400, но по нему идёт ответ модели ({} КБ, байты {} с назад) — не тронут",
+                        "线路“{}”收到 region-400，但仍在传输模型回复（{} KB，{} 秒前有数据），保留连接",
                         kind.label(),
                         to_client / 1024,
                         idle.as_secs()
@@ -1009,24 +1008,24 @@ fn on_refusals(count: usize, at: Instant, host: Option<&str>) {
                     let same = shape.is_some_and(|s| s.answered_ago.is_some());
                     if same && shape.is_some_and(|s| s.idle < Duration::from_millis(1500)) {
                         acted.push(format!(
-                            "по «{}» прямо сейчас идёт ответ модели — соединение #{} не тронуто",
+                            "线路“{}”正在传输模型回复，保留连接 #{}",
                             kind.label(),
                             tunnel
                         ));
                     } else if routes::cut_refused_tunnel(tunnel) {
                         log_proxy(&format!(
-                            "соединение #{} «{}» закрыто из-за ошибки 400 — повтор пойдёт чистым маршрутом",
+                            "因错误 400 关闭连接 #{}“{}”，重试将使用新的线路",
                             tunnel,
                             kind.label()
                         ));
                         acted.push(format!(
-                            "отказавшее соединение #{} по «{}» закрыто, следующий запрос пойдёт чистым маршрутом",
+                            "已关闭被拒绝的连接 #{}“{}”，下一次请求将使用新的线路",
                             tunnel,
                             kind.label()
                         ));
                     } else {
                         acted.push(format!(
-                            "по «{}» сейчас идёт ответ модели — маршрут и его соединения не тронуты",
+                            "线路“{}”正在传输模型回复，保留线路及现有连接",
                             kind.label()
                         ));
                     }
@@ -1039,22 +1038,16 @@ fn on_refusals(count: usize, at: Instant, host: Option<&str>) {
         // alive where the loopback door is down).
         None if resolvers::vpn_is_active() => {
             resolvers::force_substitution(FORCE_SUBSTITUTE_FOR);
-            log("VPN-выход не снимает гейт — подмена включена принудительно на 30 мин");
-            acted.push(
-                "ваш VPN не снимает блокировку — подмена адресов включена поверх туннеля на 30 мин"
-                    .to_string(),
-            );
+            log("VPN 出口无法解除地区限制，强制启用地址替换 30 分钟");
+            acted.push("当前 VPN 无法解除地区限制，将在隧道之上启用地址替换 30 分钟".to_string());
         }
         None => {
             // The client reached Google without us. The only lever that reaches
             // it is what the name resolves to, so that is re-raced now.
             resolvers::forget_names(dns::core_namespaces());
             resolvers::warm(dns::core_namespaces(), isp_interface());
-            log("Antigravity обратился к Google мимо обхода — адреса подбираются заново");
-            acted.push(
-                "Antigravity обратился к Google мимо обхода — адреса подбираются заново"
-                    .to_string(),
-            );
+            log("Antigravity 未经过解锁服务访问 Google，正在重新选择地址");
+            acted.push("Antigravity 未经过解锁服务访问 Google，正在重新选择地址".to_string());
         }
     }
     gate::record_episode(
@@ -1099,7 +1092,7 @@ fn on_answers(count: usize, at: Instant, host: Option<&str>) {
         held: 0,
         route: None,
     });
-    let label = carried.map_or("не наш", |(k, _)| k.label());
+    let label = carried.map_or("非本工具线路", |(k, _)| k.label());
     let mut lines: Vec<(usize, &'static str)> = Vec::new();
     if let Ok(mut g) = LAST_LINE.lock() {
         // A change of route ends the old line first: what was held back came
@@ -1119,10 +1112,7 @@ fn on_answers(count: usize, at: Instant, host: Option<&str>) {
         g.route = Some(label);
     }
     for (held, route) in lines {
-        log_proxy(&format!(
-            "модель ответила (x{}) — маршрут «{}»",
-            held, route
-        ));
+        log_proxy(&format!("收到模型回复（共 {} 次），线路“{}”", held, route));
     }
     gate::record_answer(carried.map(|(k, _)| k.label()));
 }
@@ -1135,9 +1125,9 @@ const FORCE_SUBSTITUTE_FOR: Duration = Duration::from_secs(30 * 60);
 fn human_minutes(d: Duration) -> String {
     let mins = d.as_secs() / 60;
     if mins >= 60 && mins % 60 == 0 {
-        format!("{} ч", mins / 60)
+        format!("{} 小时", mins / 60)
     } else {
-        format!("{} мин", mins)
+        format!("{} 分钟", mins)
     }
 }
 
@@ -1197,7 +1187,7 @@ pub fn run() -> Result<(), String> {
     // keeps answering with substituted addresses, exactly as before.
     thread::spawn(|| {
         if let Err(e) = loopback::run() {
-            log_proxy(&format!("локальные адреса гейт-хостов не заняты: {}", e));
+            log_proxy(&format!("无法监听 Google 目标域名的本地地址：{}", e));
         }
     });
     thread::spawn(watch_client_logs);
@@ -1211,7 +1201,7 @@ pub fn run() -> Result<(), String> {
 /// It maintains gate.json, the resolver pool, client log watching, and the
 /// proxy environment variable, then serves the local proxy on 127.0.0.1:53129.
 pub fn run_proxy_service() -> Result<(), String> {
-    log_proxy("служба обхода (локальный прокси) запущена");
+    log_proxy("解锁服务（本地代理）已启动");
     record_version();
     gate::note_started();
     thread::spawn(warm_forever);
@@ -1231,9 +1221,9 @@ fn spawn_proxy_env_maintainer() {
         // value names a port that no longer answers and takes the whole machine's
         // proxy-aware traffic with it (G20, G31).
         match crate::endpoint::remove_legacy_proxy_env(&proxy::proxy_url()) {
-            Ok(true) => log_proxy("снята прежняя общесистемная HTTPS_PROXY"),
+            Ok(true) => log_proxy("已移除旧的系统级 HTTPS_PROXY 环境变量"),
             Ok(false) => {}
-            Err(e) => log_proxy(&format!("прежняя HTTPS_PROXY не снята: {}", e)),
+            Err(e) => log_proxy(&format!("旧的 HTTPS_PROXY 环境变量未能移除：{}", e)),
         }
         let mut waiting_said = false;
         loop {
@@ -1246,10 +1236,7 @@ fn spawn_proxy_env_maintainer() {
                 // variable follows the listener up - still only once it answers.
                 // Said once per outage, not once a minute: this log is 64 KB.
                 if !waiting_said {
-                    log_proxy(&format!(
-                        "{} не выставлена: локальный прокси не поднялся",
-                        var
-                    ));
+                    log_proxy(&format!("未设置 {}，本地代理未启动", var));
                     waiting_said = true;
                 }
                 continue;
@@ -1261,10 +1248,10 @@ fn spawn_proxy_env_maintainer() {
                 // user set themselves still outranks ours (D19, I52, G33).
                 match crate::endpoint::ensure_proxy_env(&url) {
                     Ok(crate::endpoint::Outcome::Applied) => {
-                        log_proxy(&format!("{} снова указывает на локальный прокси", var))
+                        log_proxy(&format!("{} 已重新指向本地代理", var))
                     }
                     Ok(crate::endpoint::Outcome::AlreadySet) => {}
-                    Err(e) => log_proxy(&format!("{} не восстановлена: {}", var, e)),
+                    Err(e) => log_proxy(&format!("无法恢复 {}：{}", var, e)),
                 }
             } else if crate::endpoint::proxy_env_is_ours() {
                 // Off in the settings and still set. `remove_proxy` judges each
@@ -1272,11 +1259,8 @@ fn spawn_proxy_env_maintainer() {
                 // writes, and the legacy pair is removed by value, so a proxy of
                 // the user's own is never taken off here.
                 match crate::endpoint::remove_proxy(&url, "") {
-                    Ok(()) => log_proxy(&format!(
-                        "{} снята: локальный прокси выключен в настройках",
-                        var
-                    )),
-                    Err(e) => log_proxy(&format!("{} не снята: {}", var, e)),
+                    Ok(()) => log_proxy(&format!("已移除 {}，设置中已关闭本地代理", var)),
+                    Err(e) => log_proxy(&format!("无法移除 {}：{}", var, e)),
                 }
             }
             thread::sleep(proxy::REBIND_EVERY);
@@ -1319,7 +1303,7 @@ fn serve_dns_forever() -> ! {
         let sock = match UdpSocket::bind(addr) {
             Ok(sock) => {
                 if said.take().is_some() {
-                    log("порт DNS-релея освободился");
+                    log("DNS 转发端口已释放");
                     gate::set_blocker("dns", None);
                 }
                 sock
@@ -1330,7 +1314,7 @@ fn serve_dns_forever() -> ! {
                 // Once per distinct cause: the retry is a minute, the log is 64 KB.
                 if said.as_ref() != Some(&blocker) {
                     log(&format!(
-                        "не занять {} — {} ({}{})",
+                        "无法监听 {}：{}（{}{}）",
                         blocker.addr,
                         blocker.error,
                         blocker.cause,
@@ -1353,12 +1337,12 @@ fn serve_dns_forever() -> ! {
         // rules, and nothing else tells it otherwise (G75). Here and not a line
         // earlier: the socket is bound, so a re-ask reaches us.
         if crate::dns::flush_client_cache() {
-            log("кэш DNS-клиента по гейт-именам сброшен — клиент спросит заново");
+            log("已清除 Google 目标域名的 DNS 缓存，客户端将重新查询");
         }
         let up = Instant::now();
         serve_queries(&sock);
         drop(sock);
-        log("DNS-сокет перестал принимать запросы — занимаем заново");
+        log("DNS 套接字已停止接收请求，正在重新监听");
         // Never in a tight loop: a socket that did not last a minute is not one
         // an immediate retry will fix, so it waits out the same clock a failed
         // bind does.
@@ -1466,7 +1450,7 @@ fn note_loopback(name: &str) {
         })
         .unwrap_or(false);
     if due {
-        log(&format!("loopback     {} [наш маршрут]", name));
+        log(&format!("loopback     {} [本工具线路]", name));
     }
 }
 
@@ -1506,10 +1490,10 @@ mod tests {
 
     #[test]
     fn a_penalty_reads_in_minutes_or_hours() {
-        assert_eq!(human_minutes(Duration::from_secs(600)), "10 мин");
-        assert_eq!(human_minutes(Duration::from_secs(3600)), "1 ч");
-        assert_eq!(human_minutes(Duration::from_secs(6 * 3600)), "6 ч");
-        assert_eq!(human_minutes(Duration::from_secs(90 * 60)), "90 мин");
+        assert_eq!(human_minutes(Duration::from_secs(600)), "10 分钟");
+        assert_eq!(human_minutes(Duration::from_secs(3600)), "1 小时");
+        assert_eq!(human_minutes(Duration::from_secs(6 * 3600)), "6 小时");
+        assert_eq!(human_minutes(Duration::from_secs(90 * 60)), "90 分钟");
     }
 
     /// Everything the version check does hangs off this: a relay that predates
@@ -1519,7 +1503,7 @@ mod tests {
     fn an_unreadable_version_is_the_oldest_one() {
         assert_eq!(parse_version(None), 0);
         assert_eq!(parse_version(Some("")), 0);
-        assert_eq!(parse_version(Some("не число")), 0);
+        assert_eq!(parse_version(Some("不是数字")), 0);
         assert_eq!(parse_version(Some(" 7 \r\n")), 7);
         assert!(parse_version(None) < RELAY_VERSION);
     }
@@ -1537,36 +1521,36 @@ mod tests {
     /// is written the moment anything else is logged.
     #[test]
     fn a_run_of_one_line_is_collapsed_into_a_count() {
-        let line = "напрямую X: имя не разрешается";
+        let line = "直连 X：域名解析失败";
         // The first is written, with nothing held back before it.
         assert_eq!(collapse_repeat(line), (None, true));
         for _ in 0..14 {
             assert_eq!(collapse_repeat(line), (None, false), "a repeat was written");
         }
         // Something else ends the run and carries the tally.
-        let (note, write) = collapse_repeat("что-то другое");
+        let (note, write) = collapse_repeat("其他内容");
         assert!(write);
-        assert_eq!(note.as_deref(), Some("↑ то же самое ещё 14 раз"));
+        assert_eq!(note.as_deref(), Some("↑ 相同信息又出现 14 次"));
         // …and the next line after that has nothing to report.
-        assert_eq!(collapse_repeat("третья"), (None, true));
+        assert_eq!(collapse_repeat("第三条"), (None, true));
 
         // And a run that never ends is never silent: the tally is written every
         // `REPEAT_RUN`, so a problem repeating for an hour is still visible.
         // One test and not two: `collapse_repeat` keeps one run per process,
         // and two tests would race for it.
-        let line = "бесконечное";
+        let line = "无限重复";
         assert_eq!(collapse_repeat(line), (None, true));
         for _ in 0..(REPEAT_RUN - 1) {
             assert_eq!(collapse_repeat(line), (None, false));
         }
         let (note, write) = collapse_repeat(line);
         assert!(!write, "the repeat itself is still not written");
-        assert_eq!(note.as_deref(), Some("↑ то же самое ещё 50 раз"));
+        assert_eq!(note.as_deref(), Some("↑ 相同信息又出现 50 次"));
         // The counter restarted, so the next line ends a fresh run.
         assert_eq!(collapse_repeat(line), (None, false));
         assert_eq!(
-            collapse_repeat("иное").0.as_deref(),
-            Some("↑ то же самое ещё 1 раз")
+            collapse_repeat("其他").0.as_deref(),
+            Some("↑ 相同信息又出现 1 次")
         );
     }
 

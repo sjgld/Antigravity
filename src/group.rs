@@ -301,7 +301,7 @@ fn pick_server(key: &GroupKey) -> (usize, String) {
         state.current = Some(pick);
         drop(state);
         crate::dns_forwarder::log_proxy(&format!(
-            "Прокси из группы: сервер #{} из {} (CPU {}%)",
+            "群组代理：服务器 #{} / {}（CPU {}%）",
             pick + 1,
             total,
             cpu
@@ -330,7 +330,7 @@ pub fn bench_current_server() -> bool {
     state.current = None;
     drop(state);
     crate::dns_forwarder::log_proxy(&format!(
-        "Прокси из группы: сервер #{} отдал region-400 — отложен на 5 мин, следующее соединение пойдёт на другой",
+        "群组服务器 #{} 返回 region-400，暂缓使用 5 分钟，下一次连接将切换服务器",
         cur + 1
     ));
     group_state()
@@ -361,7 +361,7 @@ fn scrub(msg: &str) -> String {
     let mut out = msg.to_string();
     for h in hosts {
         if !h.is_empty() {
-            out = out.replace(&h, "<сервер>");
+            out = out.replace(&h, "<服务器>");
         }
     }
     out
@@ -393,12 +393,7 @@ pub fn get_active_key() -> Option<GroupKey> {
 
 fn group_route() -> &'static Route {
     static ROUTE: OnceLock<Route> = OnceLock::new();
-    ROUTE.get_or_init(|| {
-        Route::new(
-            Box::leak("Прокси из группы".into()),
-            crate::routes::Kind::Group,
-        )
-    })
+    ROUTE.get_or_init(|| Route::new(Box::leak("群组代理".into()), crate::routes::Kind::Group))
 }
 
 pub fn available() -> bool {
@@ -443,7 +438,7 @@ fn hmac_sha256(key: &[u8], data: &[u8]) -> [u8; 32] {
 
 /// The server's name and addresses, resolved at most every 10 minutes.
 fn server_addrs(server: &str, force_refresh: bool) -> Result<(String, Vec<SocketAddr>), String> {
-    let (host, port) = valid_server_name(server).ok_or("нет сервера")?;
+    let (host, port) = valid_server_name(server).ok_or("没有服务器")?;
     // (addresses, fresh): a stale answer is kept to fall back on, never dropped.
     let cached = {
         let state = group_state().lock().unwrap();
@@ -480,7 +475,7 @@ fn server_addrs(server: &str, force_refresh: bool) -> Result<(String, Vec<Socket
     if resolved.is_empty() {
         return match cached {
             Some((a, _)) => Ok((host, a)),
-            None => Err("нет IPv4 адресов".to_string()),
+            None => Err("没有 IPv4 地址".to_string()),
         };
     }
     if let Some(s) = group_state()
@@ -525,11 +520,11 @@ fn open_tls(
             break;
         }
     }
-    let sock = sock.ok_or_else(|| "не удалось подключиться".to_string())?;
+    let sock = sock.ok_or_else(|| "连接失败".to_string())?;
     sock.set_read_timeout(Some(budget)).ok();
     sock.set_write_timeout(Some(budget)).ok();
     STAGES.with(|c| c.set([dns_ms, t_tcp.elapsed().as_millis() as u64, 0]));
-    let name = ServerName::try_from(host).map_err(|_| "недопустимое имя сервера".to_string())?;
+    let name = ServerName::try_from(host).map_err(|_| "服务器名称无效".to_string())?;
     let tls = ClientConnection::new(agu2_config(), name).map_err(|e| e.to_string())?;
     Ok((tls, sock))
 }
@@ -539,7 +534,7 @@ fn fresh_nonce() -> Result<String, String> {
     default_provider()
         .secure_random
         .fill(&mut nonce)
-        .map_err(|_| "генератор случайных чисел отказал")?;
+        .map_err(|_| "随机数生成失败")?;
     Ok(hex::encode(nonce))
 }
 
@@ -577,14 +572,14 @@ fn open_agu2(
     let mut buf = [0u8; 1024];
     let hdr_end = loop {
         match stream.read(&mut buf) {
-            Ok(0) => return Err("сервер группы отказал: соединение закрыто".to_string()),
+            Ok(0) => return Err("群组服务器拒绝连接：连接已关闭".to_string()),
             Ok(n) => {
                 acc.extend_from_slice(&buf[..n]);
                 if let Some(pos) = acc.windows(4).position(|w| w == b"\r\n\r\n") {
                     break pos + 4;
                 }
                 if acc.len() > 4096 {
-                    return Err("сервер группы отказал: ответ слишком велик".to_string());
+                    return Err("群组服务器拒绝连接：响应过大".to_string());
                 }
             }
             Err(e) if e.kind() == ErrorKind::WouldBlock => {}
@@ -599,7 +594,7 @@ fn open_agu2(
         .unwrap_or_default();
 
     if !status.contains(" 200") {
-        return Err(format!("сервер группы отказал: {}", status));
+        return Err(format!("群组服务器拒绝连接：{}", status));
     }
 
     STAGES.with(|c| {
@@ -937,7 +932,7 @@ fn fetch_status(key: &GroupKey, server: &str) -> Result<Status, String> {
         // must not hold the poll for a read timeout per byte.
         let left = deadline.saturating_duration_since(Instant::now());
         if left.is_zero() {
-            return Err("нет ответа вовремя".to_string());
+            return Err("响应超时".to_string());
         }
         sock.set_read_timeout(Some(left)).ok();
         match rustls::Stream::new(&mut tls, &mut sock).read(&mut buf) {
@@ -945,7 +940,7 @@ fn fetch_status(key: &GroupKey, server: &str) -> Result<Status, String> {
             Ok(n) => {
                 raw.extend_from_slice(&buf[..n]);
                 if raw.len() > 64 * 1024 {
-                    return Err("ответ слишком велик".to_string());
+                    return Err("响应过大".to_string());
                 }
             }
             // A peer that closes without close_notify still sent its answer.
@@ -956,11 +951,11 @@ fn fetch_status(key: &GroupKey, server: &str) -> Result<Status, String> {
     let end = raw
         .windows(4)
         .position(|w| w == b"\r\n\r\n")
-        .ok_or("нет ответа")?;
+        .ok_or("无响应")?;
     let head = String::from_utf8_lossy(&raw[..end]).into_owned();
     let body = &raw[end + 4..];
     if !head.lines().next().unwrap_or("").contains(" 200") {
-        return Err("сервер отказал".to_string());
+        return Err("服务器拒绝请求".to_string());
     }
     let sig = head
         .lines()
@@ -972,7 +967,7 @@ fn fetch_status(key: &GroupKey, server: &str) -> Result<Status, String> {
     signed.extend_from_slice(body);
     let want = hex::encode(hmac_sha256(&key.user_key, &signed));
     if !crate::group_key::ct_eq(want.as_bytes(), sig.as_bytes()) {
-        return Err("подпись не сходится".to_string());
+        return Err("签名不匹配".to_string());
     }
     let v: serde_json::Value = serde_json::from_slice(body).map_err(|e| e.to_string())?;
     Ok(Status {
@@ -1096,14 +1091,10 @@ fn poll_pool(key: &GroupKey) {
     drop(state);
 
     for (n, why) in failed {
-        crate::dns_forwarder::log_proxy(&format!(
-            "Прокси из группы #{}: статус: {}",
-            n,
-            scrub(&why)
-        ));
+        crate::dns_forwarder::log_proxy(&format!("群组代理 #{}：状态 {}", n, scrub(&why)));
     }
     if let Some(names) = saved {
-        crate::dns_forwarder::log_proxy(&format!("Прокси из группы: серверов в пуле {}", total));
+        crate::dns_forwarder::log_proxy(&format!("群组代理：服务器池中有 {} 台服务器", total));
         save_servers(key, names);
     }
     for name in retry {
@@ -1150,7 +1141,7 @@ fn probe_via(key: &GroupKey, server: &str, force_refresh: bool) -> Result<(), St
         let mut stream = rustls::Stream::new(&mut tls, &mut stream_owned);
 
         if !leftover.is_empty() {
-            return Err("неожиданные данные после CONNECT".to_string());
+            return Err("CONNECT 后出现意外数据".to_string());
         }
 
         stream
@@ -1163,7 +1154,7 @@ fn probe_via(key: &GroupKey, server: &str, force_refresh: bool) -> Result<(), St
             let t_sys = Instant::now();
             let _ = server.to_socket_addrs();
             crate::dns_forwarder::log_proxy(&format!(
-                "замер группы: всего {} мс = имя {} + TCP {} + TLS/CONNECT {} + внутренний TLS и ответ {}; системный DNS для сервера {} мс",
+                "群组测速：共 {} 毫秒 = 解析 {} + TCP {} + TLS/CONNECT {} + 内层 TLS 及响应 {}；服务器系统 DNS 耗时 {} 毫秒",
                 total,
                 dns_ms,
                 tcp_ms,
@@ -1173,7 +1164,7 @@ fn probe_via(key: &GroupKey, server: &str, force_refresh: bool) -> Result<(), St
             ));
             Ok(())
         } else {
-            Err("ответ не похож на HTTP".to_string())
+            Err("响应不是有效的 HTTP 数据".to_string())
         }
     }
 }

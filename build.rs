@@ -192,12 +192,16 @@ fn main() {
         "cargo:warning=private routes: relay={} exits={} group={}",
         relay, exits, group
     );
+    println!(
+        "cargo:rustc-env=AG_GROUP_AVAILABLE={}",
+        if group { "1" } else { "0" }
+    );
 
     if env::var("CARGO_CFG_TARGET_OS").unwrap() == "windows" {
         let mut res = winres::WindowsResource::new();
         res.set_icon("icon.ico");
-        res.set("FileDescription", "Antigravity Configuration Tool");
-        res.set("ProductName", "Antigravity Configurator");
+        res.set("FileDescription", "Antigravity 解锁器 · 简体中文版");
+        res.set("ProductName", "Antigravity 解锁器");
         res.set("LegalCopyright", "Brent t.me/nova_txt");
         // Copyright management information in the version resource: survives
         // UPX (the resource directory stays readable on the packed file) and is

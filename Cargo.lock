@@ -190,6 +190,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "socket2",
+ "unicode-width",
  "webpki-roots",
  "wgpu",
  "windows-sys 0.61.2",

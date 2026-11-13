@@ -32,6 +32,7 @@ socket2 = { version = "0.6", features = ["all"] }
 # e.g. a server over SSH; on Windows also the fallback when no renderer opens a
 # window). Only the crossterm backend - no widgets beyond the core set.
 ratatui = { version = "0.30", default-features = false, features = ["crossterm"] }
+unicode-width = "0.2"
 
 # The GUI. Immediate mode, pure Rust, one static exe with no runtime to install
 # (no WebView2, no GTK) - that is what makes it drop onto an arbitrary Windows

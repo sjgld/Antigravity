@@ -56,7 +56,7 @@ mod sys {
         if rc == 0 {
             Ok(())
         } else {
-            Err("не удалось привязать сокет к интерфейсу".to_string())
+            Err("无法将套接字绑定到网卡".to_string())
         }
     }
 }
@@ -77,7 +77,7 @@ mod sys {
                 crate::net::note_unpinned(&e);
                 Ok(())
             }
-            Err(_) => Err("не удалось привязать сокет к интерфейсу".to_string()),
+            Err(_) => Err("无法将套接字绑定到网卡".to_string()),
         }
     }
 }
@@ -506,13 +506,13 @@ pub fn query_raw_via(
     if_index: u32,
     timeout: Duration,
 ) -> Result<Vec<u8>, String> {
-    let sock = UdpSocket::bind(("0.0.0.0", 0)).map_err(|_| "нет UDP-сокета".to_string())?;
+    let sock = UdpSocket::bind(("0.0.0.0", 0)).map_err(|_| "没有可用的 UDP 套接字".to_string())?;
     if if_index != 0 {
         sys::bind_socket_to_interface(&sock, if_index)?;
     }
     sock.set_read_timeout(Some(timeout)).ok();
     sock.send_to(packet, SocketAddr::from((server, DNS_PORT)))
-        .map_err(|_| "запрос не отправлен".to_string())?;
+        .map_err(|_| "请求未发送".to_string())?;
 
     let want_id = packet.get(0..2).map(|b| [b[0], b[1]]);
     let deadline = Instant::now() + timeout;
@@ -520,7 +520,7 @@ pub fn query_raw_via(
     loop {
         let (n, from) = sock
             .recv_from(&mut buf)
-            .map_err(|_| "резолвер не ответил".to_string())?;
+            .map_err(|_| "DNS 服务器未响应".to_string())?;
         // A stray packet must not end the wait: keep reading until the deadline
         // for one that came from the resolver and answers the id we sent.
         let right_source = from.ip() == IpAddr::V4(server);
@@ -533,7 +533,7 @@ pub fn query_raw_via(
             return Ok(buf[..n].to_vec());
         }
         if Instant::now() >= deadline {
-            return Err("резолвер не ответил".to_string());
+            return Err("DNS 服务器未响应".to_string());
         }
     }
 }

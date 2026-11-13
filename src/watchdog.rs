@@ -264,14 +264,14 @@ impl ListenerGuard {
         let ca = crate::proxy::ca_cert_path().to_string_lossy().to_string();
         match crate::endpoint::remove_proxy_if_ours(&url, &ca) {
             Ok(true) => log(&format!(
-                "прокси {} не отвечает {} с — переменная {} снята",
+                "代理 {} 已连续 {} 秒未响应，已移除环境变量 {}",
                 url,
                 LISTENER_DEAD_AFTER * LISTENER_CHECK_EVERY * POLL.as_secs() as u32,
                 crate::endpoint::PROXY_ENV_VAR
             )),
             Ok(false) => {}
             Err(e) => log(&format!(
-                "не удалось снять {}: {}",
+                "无法移除 {}：{}",
                 crate::endpoint::PROXY_ENV_VAR,
                 e
             )),
@@ -283,12 +283,8 @@ impl ListenerGuard {
 fn reopen_app(st: &mut FileState) {
     if let Some(app) = st.reopen.take() {
         match patch_binary::launch_app(&app) {
-            Ok(()) => log(&format!("Antigravity запущен снова: {}", show(&app))),
-            Err(e) => log(&format!(
-                "Antigravity не удалось запустить: {} - {}",
-                show(&app),
-                e
-            )),
+            Ok(()) => log(&format!("Antigravity 已重新启动：{}", show(&app))),
+            Err(e) => log(&format!("无法启动 Antigravity：{} — {}", show(&app), e)),
         }
     }
 }
@@ -303,7 +299,10 @@ fn inspect(target: &Path, st: &mut FileState) {
     if st.handled == Some(cur) {
         return;
     }
-    if st.deferred_until.is_some_and(|(shape, until)| shape == cur && Instant::now() < until) {
+    if st
+        .deferred_until
+        .is_some_and(|(shape, until)| shape == cur && Instant::now() < until)
+    {
         return;
     }
     // Wait for the file to settle: act only once we have seen the same
@@ -350,7 +349,11 @@ fn inspect(target: &Path, st: &mut FileState) {
             reopen_app(st);
         }
         RepatchOutcome::Deferred(e) => {
-            log(&format!("additive patch deferred, LS left running: {} - {}", show(target), e));
+            log(&format!(
+                "additive patch deferred, LS left running: {} - {}",
+                show(target),
+                e
+            ));
             st.deferred_until = Some((cur, Instant::now() + Duration::from_secs(30)));
         }
         RepatchOutcome::Failed(e) => {
@@ -376,6 +379,8 @@ fn inspect(target: &Path, st: &mut FileState) {
                     || low.contains("занят")
                     || low.contains("access is denied")
                     || low.contains("отказано в доступе")
+                    || low.contains("被占用")
+                    || low.contains("拒绝访问")
                     || low.contains("os error 32")
                     || low.contains("os error 33")
             };
@@ -391,17 +396,14 @@ fn inspect(target: &Path, st: &mut FileState) {
                 reopen_app(st);
                 if st.blocked == MAX_LAUNCH_HOLDS {
                     st.blocked += 1;
-                    log(&format!(
-                        "файл занят не Antigravity - оставляю как есть: {}",
-                        show(target)
-                    ));
+                    log(&format!("文件被其他程序占用，保持现状：{}", show(target)));
                 }
                 return;
             }
             st.blocked += 1;
             st.blocked_for = Some(cur);
             log(&format!(
-                "закрываю запущенный Antigravity, чтобы применить патч ({}/{}): {}",
+                "正在关闭 Antigravity 以应用补丁（{}/{}）：{}",
                 st.blocked,
                 MAX_LAUNCH_HOLDS,
                 show(target)

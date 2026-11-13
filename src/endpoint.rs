@@ -94,7 +94,7 @@ pub fn ide_settings_path(install: &Path) -> Option<PathBuf> {
 #[allow(dead_code)]
 fn upsert_key(text: &str, key: &str, value: &str) -> Result<String, String> {
     let existing = Regex::new(&format!(r#""{}"\s*:\s*"[^"]*""#, regex::escape(key)))
-        .map_err(|_| "неверный шаблон настройки".to_string())?;
+        .map_err(|_| "配置模板无效".to_string())?;
     let entry = format!("\"{}\": \"{}\"", key, value);
 
     if existing.is_match(text) {
@@ -106,7 +106,7 @@ fn upsert_key(text: &str, key: &str, value: &str) -> Result<String, String> {
 
     let cut = text
         .rfind('}')
-        .ok_or_else(|| "settings.json без закрывающей скобки".to_string())?;
+        .ok_or_else(|| "settings.json 缺少右括号".to_string())?;
     let head = text[..cut].trim_end();
     let mut out = String::with_capacity(text.len() + entry.len() + 8);
     out.push_str(head);
@@ -128,12 +128,12 @@ fn remove_key(text: &str, key: &str) -> Result<String, String> {
     // As a later entry it carries a comma in front of it; as the only or first
     // entry, the comma (if any) follows.
     let trailing = Regex::new(&format!(r#",\s*"{}"\s*:\s*"[^"]*""#, escaped))
-        .map_err(|_| "неверный шаблон настройки".to_string())?;
+        .map_err(|_| "配置模板无效".to_string())?;
     if trailing.is_match(text) {
         return Ok(trailing.replace(text, "").into_owned());
     }
     let alone = Regex::new(&format!(r#""{}"\s*:\s*"[^"]*"\s*,?\s*"#, escaped))
-        .map_err(|_| "неверный шаблон настройки".to_string())?;
+        .map_err(|_| "配置模板无效".to_string())?;
     Ok(alone.replace(text, "").into_owned())
 }
 
@@ -163,7 +163,7 @@ pub fn remove_ide(install: &Path) -> Result<(), String> {
         return Ok(());
     }
     let updated = remove_key(&text, IDE_SETTING)?;
-    fs::write(&path, updated).map_err(|e| format!("не записать {}: {}", path.display(), e))
+    fs::write(&path, updated).map_err(|e| format!("无法写入 {}：{}", path.display(), e))
 }
 
 /// Removes the variable, but only when it still holds the value we wrote: a
@@ -176,7 +176,7 @@ pub fn remove_cli() -> Result<(), String> {
         "[Environment]::SetEnvironmentVariable('{}',$null,'User')",
         CLI_ENV_VAR
     );
-    powershell(&script).ok_or_else(|| "не удалось удалить переменную среды".to_string())?;
+    powershell(&script).ok_or_else(|| "无法移除环境变量".to_string())?;
     Ok(())
 }
 
@@ -381,10 +381,7 @@ pub fn apply_proxy(url: &str, _ca_path: &str) -> Result<Outcome, String> {
     use std::process::Command;
     let path = environment_d_path()?;
     let body = format!(
-        "# Antigravity Unlocker — гейт-хосты через локальный прокси. Переменную\n\
-         # читает только пропатченный language server. Удалите файл, чтобы\n\
-         # отключить.\n\
-         {k}={u}\n",
+        "# Antigravity 解锁器：通过本地代理连接 Google 目标服务。\n# 此变量仅由已应用补丁的语言服务器读取。\n# 删除此文件即可停用。\n{k}={u}\n",
         k = PROXY_ENV_VAR,
         u = url,
     );
@@ -395,9 +392,9 @@ pub fn apply_proxy(url: &str, _ca_path: &str) -> Result<Outcome, String> {
     }
     if !already {
         if let Some(dir) = path.parent() {
-            fs::create_dir_all(dir).map_err(|e| format!("не создать {}: {}", dir.display(), e))?;
+            fs::create_dir_all(dir).map_err(|e| format!("无法创建 {}：{}", dir.display(), e))?;
         }
-        fs::write(&path, &body).map_err(|e| format!("не записать {}: {}", path.display(), e))?;
+        fs::write(&path, &body).map_err(|e| format!("无法写入 {}：{}", path.display(), e))?;
     }
     // Immediate effect for newly-launched apps in this session (best-effort).
     Command::new("systemctl")
@@ -416,7 +413,7 @@ pub fn apply_proxy(url: &str, _ca_path: &str) -> Result<Outcome, String> {
 fn environment_d_path() -> Result<PathBuf, String> {
     let base = match std::env::var("XDG_CONFIG_HOME") {
         Ok(x) if !x.is_empty() => PathBuf::from(x),
-        _ => PathBuf::from(std::env::var("HOME").map_err(|_| "HOME не задан".to_string())?)
+        _ => PathBuf::from(std::env::var("HOME").map_err(|_| "未设置 HOME 环境变量".to_string())?)
             .join(".config"),
     };
     Ok(base.join("environment.d").join("ag-unlocker.conf"))
@@ -520,7 +517,7 @@ fn session_manager_proxy(ours: &str) -> Option<ForeignProxy> {
             if !is_ours_on_any_port(&value, ours) {
                 return Some(ForeignProxy {
                     value,
-                    found_in: format!("{} в launchctl (окружение приложений)", name),
+                    found_in: format!("应用程序环境 launchctl 中的 {}", name),
                 });
             }
         }
@@ -571,7 +568,7 @@ pub fn foreign_proxy(ours: &str) -> Option<ForeignProxy> {
             if !is_ours_on_any_port(&value, ours) {
                 return Some(ForeignProxy {
                     value,
-                    found_in: format!("переменная среды {} ({})", LEGACY_PROXY_ENV_VAR, scope),
+                    found_in: format!("环境变量 {}（{}）", LEGACY_PROXY_ENV_VAR, scope),
                 });
             }
         }
@@ -599,7 +596,7 @@ pub fn foreign_proxy(ours: &str) -> Option<ForeignProxy> {
             if !value.is_empty() && !is_ours_on_any_port(&value, ours) {
                 return Some(ForeignProxy {
                     value,
-                    found_in: format!("переменная среды {}", name),
+                    found_in: format!("环境变量 {}", name),
                 });
             }
         }
@@ -633,7 +630,7 @@ fn session_manager_proxy(ours: &str) -> Option<ForeignProxy> {
         if !value.is_empty() && !is_ours_on_any_port(value, ours) {
             return Some(ForeignProxy {
                 value: value.to_string(),
-                found_in: format!("{} в сессии systemd --user", name),
+                found_in: format!("systemd --user 会话中的 {}", name),
             });
         }
     }
@@ -665,7 +662,7 @@ fn antigravity_proxy_setting(ours: &str) -> Option<ForeignProxy> {
                 return Some(ForeignProxy {
                     value,
                     found_in: format!(
-                        "http.proxy в {}",
+                        "{} 中的 http.proxy",
                         crate::utils::mask_path(&path.to_string_lossy())
                     ),
                 });
@@ -836,7 +833,7 @@ fn set_env(name: &str, value: Option<&str>) -> Result<(), String> {
         "[Environment]::SetEnvironmentVariable('{}',{},'User')",
         name, literal
     );
-    powershell(&script).ok_or_else(|| format!("не удалось записать {}", name))?;
+    powershell(&script).ok_or_else(|| format!("无法写入 {}", name))?;
     Ok(())
 }
 
@@ -850,10 +847,7 @@ fn set_env(name: &str, value: Option<&str>) -> Result<(), String> {
 fn set_env(name: &str, value: Option<&str>) -> Result<(), String> {
     match value {
         None => Ok(()),
-        Some(_) => Err(format!(
-            "{} на Linux пока не задаётся (нужен свой прокси-слой порта)",
-            name
-        )),
+        Some(_) => Err(format!("Linux 暂不支持设置 {}，需要适配代理功能", name)),
     }
 }
 

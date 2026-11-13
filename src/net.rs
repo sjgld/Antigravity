@@ -150,7 +150,7 @@ pub fn note_unpinned(e: &io::Error) {
     if !SAID.swap(true, Ordering::Relaxed) {
         #[cfg(not(test))]
         crate::dns_forwarder::log_proxy(&format!(
-            "соединения не привязать к интерфейсу провайдера ({}) — идут по таблице маршрутов",
+            "无法将连接绑定到物理网卡（{}），将使用系统路由表",
             e
         ));
         #[cfg(test)]

@@ -266,7 +266,7 @@ fn check_host(host: &str, pin: u32, generation: u64) {
             })
             .next();
         crate::dns_forwarder::log_proxy(&format!(
-            "DNS {host}: доступно {}/{} прокси{}{}; регион подтверждается ответом модели",
+            "DNS {host}：可用代理 {}/{}{}{}；地区是否可用需通过模型回复验证",
             after.len(),
             results.len(),
             if failures.is_some() { "; " } else { "" },

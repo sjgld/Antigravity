@@ -16,15 +16,29 @@ impl PatchLock {
         use sha2::{Digest, Sha256};
         use windows_sys::Win32::System::Threading::{CreateMutexW, WaitForSingleObject};
         let absolute = fs::canonicalize(path).map_err(|e| e.to_string())?;
-        let id = hex::encode(Sha256::digest(absolute.to_string_lossy().to_lowercase().as_bytes()));
-        let name: Vec<_> = format!("Global\\AGUnlocker.Patch.{id}").encode_utf16().chain(Some(0)).collect();
+        let id = hex::encode(Sha256::digest(
+            absolute.to_string_lossy().to_lowercase().as_bytes(),
+        ));
+        let name: Vec<_> = format!("Global\\AGUnlocker.Patch.{id}")
+            .encode_utf16()
+            .chain(Some(0))
+            .collect();
         let handle = unsafe { CreateMutexW(std::ptr::null(), 0, name.as_ptr()) };
-        if handle.is_null() { return Err(std::io::Error::last_os_error().to_string()); }
+        if handle.is_null() {
+            return Err(std::io::Error::last_os_error().to_string());
+        }
         let waited = unsafe { WaitForSingleObject(handle, 15_000) };
-        if waited == 0 || waited == 0x80 { return Ok(Self(handle)); }
-        let error = if waited == 258 { "another patch writer is still busy".into() }
-            else { std::io::Error::last_os_error().to_string() };
-        unsafe { windows_sys::Win32::Foundation::CloseHandle(handle); }
+        if waited == 0 || waited == 0x80 {
+            return Ok(Self(handle));
+        }
+        let error = if waited == 258 {
+            "another patch writer is still busy".into()
+        } else {
+            std::io::Error::last_os_error().to_string()
+        };
+        unsafe {
+            windows_sys::Win32::Foundation::CloseHandle(handle);
+        }
         Err(error)
     }
 }
@@ -338,7 +352,7 @@ fn rewrite(bin_path: &Path, from: &[u8], to: &[u8]) -> Result<usize, String> {
         return if count_occurrences(&data, to) > 0 {
             Ok(0)
         } else {
-            Err("Сигнатура не найдена".to_string())
+            Err("未找到补丁特征".to_string())
         };
     }
     write_binary(bin_path, &data)?;
@@ -502,8 +516,11 @@ fn repatch_with(bin_path: &Path, kill_locked: bool) -> RepatchOutcome {
         }
         return RepatchOutcome::AlreadyPatched;
     }
-    let written = if kill_locked { write_binary(bin_path, &data) }
-        else { write_atomic(bin_path, &data).map_err(|e| e.to_string()) };
+    let written = if kill_locked {
+        write_binary(bin_path, &data)
+    } else {
+        write_atomic(bin_path, &data).map_err(|e| e.to_string())
+    };
     match written {
         Ok(()) => RepatchOutcome::Repatched(replaced),
         Err(e) => RepatchOutcome::Failed(e),
@@ -723,7 +740,7 @@ pub fn patch_all_binaries(inst: &Path) -> BinarySummary {
             // `rewrite` says "Сигнатура не найдена" for a literal that is not
             // there and anything else for an I/O problem. Only the second is
             // worth telling the user to retry.
-            Err(e) if !e.contains("Сигнатура") => summary.proxy_var_retryable = true,
+            Err(e) if !e.contains("补丁特征") => summary.proxy_var_retryable = true,
             Err(_) => {}
         }
     }
@@ -892,16 +909,25 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn competing_writers_wait_then_read_the_committed_patch() {
-        let path = std::env::temp_dir().join(format!("ag_patch_transaction_{}.bin", std::process::id()));
+        let path =
+            std::env::temp_dir().join(format!("ag_patch_transaction_{}.bin", std::process::id()));
         fs::write(&path, b"..ineligible..https_proxy..").unwrap();
         let lock = PatchLock::acquire(&path).unwrap();
         let (tx, rx) = std::sync::mpsc::channel();
         let other = path.clone();
-        let worker = std::thread::spawn(move || { tx.send(repatch_before_launch(&other)).unwrap(); });
-        assert!(matches!(rx.recv_timeout(Duration::from_millis(150)), Err(std::sync::mpsc::RecvTimeoutError::Timeout)));
+        let worker = std::thread::spawn(move || {
+            tx.send(repatch_before_launch(&other)).unwrap();
+        });
+        assert!(matches!(
+            rx.recv_timeout(Duration::from_millis(150)),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+        ));
         assert_eq!(fs::read(&path).unwrap(), b"..ineligible..https_proxy..");
         drop(lock);
-        assert_eq!(rx.recv_timeout(Duration::from_secs(5)).unwrap(), RepatchOutcome::Repatched(1));
+        assert_eq!(
+            rx.recv_timeout(Duration::from_secs(5)).unwrap(),
+            RepatchOutcome::Repatched(1)
+        );
         worker.join().unwrap();
         assert_eq!(repatch_before_launch(&path), RepatchOutcome::AlreadyPatched);
         assert_eq!(fs::read(&path).unwrap(), b"..inexigible..AG_LS_PROXY..");
@@ -912,10 +938,18 @@ mod tests {
     #[test]
     fn a_locked_proxy_only_edit_is_deferred_and_retried() {
         use std::os::windows::fs::OpenOptionsExt;
-        let path = std::env::temp_dir().join(format!("ag_proxy_deferred_{}.bin", std::process::id()));
+        let path =
+            std::env::temp_dir().join(format!("ag_proxy_deferred_{}.bin", std::process::id()));
         fs::write(&path, b"..inexigible..https_proxy..").unwrap();
-        let reader = fs::OpenOptions::new().read(true).share_mode(1).open(&path).unwrap();
-        assert!(matches!(repatch_if_needed(&path), RepatchOutcome::Deferred(_)));
+        let reader = fs::OpenOptions::new()
+            .read(true)
+            .share_mode(1)
+            .open(&path)
+            .unwrap();
+        assert!(matches!(
+            repatch_if_needed(&path),
+            RepatchOutcome::Deferred(_)
+        ));
         assert_eq!(fs::read(&path).unwrap(), b"..inexigible..https_proxy..");
         drop(reader);
         assert_eq!(repatch_if_needed(&path), RepatchOutcome::AlreadyPatched);
@@ -937,7 +971,7 @@ mod tests {
     #[ignore = "reads the real installs on this machine; run with --ignored"]
     fn inspects_the_installs_on_this_machine() {
         let installs = crate::discover_installs_fast();
-        println!("установок найдено: {}", installs.len());
+        println!("找到 {} 个安装", installs.len());
         for install in &installs {
             println!(
                 "\n{} — {}",
@@ -952,12 +986,12 @@ mod tests {
                 let proxy = if contains_subslice(&bytes, PROXY_VAR_NEW.as_bytes()) {
                     "AG_LS_PROXY"
                 } else if contains_subslice(&bytes, &proxy_var_original()) {
-                    "не переименован"
+                    "未重命名"
                 } else {
-                    "ЛИТЕРАЛА НЕТ"
+                    "未找到原始字段"
                 };
                 println!(
-                    "  {:?}  прокси-переменная: {}  — {}",
+                    "  {:?}  代理环境变量：{} — {}",
                     state,
                     proxy,
                     path.file_name().unwrap_or_default().to_string_lossy()

@@ -329,7 +329,7 @@ fn query_ips(
     budget: Duration,
 ) -> Result<Vec<u8>, String> {
     let deadline = Instant::now() + budget;
-    let mut last = "нет адресов".to_string();
+    let mut last = "无可用地址".to_string();
     if ips.is_empty() {
         return Err(last);
     }
@@ -704,7 +704,7 @@ impl Conn {
         let ip = self.ip;
         let left = deadline.saturating_duration_since(Instant::now());
         if left.is_zero() {
-            return Err(Fail::Broken(format!("{}: бюджет истёк до запроса", ip)));
+            return Err(Fail::Broken(format!("{}：发起请求前已超时", ip)));
         }
         // A kept socket still carries the deadline of the query before it.
         self.sock.deadline = deadline;
@@ -728,7 +728,7 @@ impl Conn {
             std::io::Write::write_all(&mut tls, &out).and_then(|_| std::io::Write::flush(&mut tls));
         let answer = match sent {
             Ok(()) => read_reply(&mut tls, &mut self.buf, stream, ip, deadline),
-            Err(_) => Err(Fail::Gone(format!("{}: запрос не ушёл", ip))),
+            Err(_) => Err(Fail::Gone(format!("{}：请求发送失败", ip))),
         };
         self.last_used = Instant::now();
         answer
@@ -753,7 +753,7 @@ fn handshake(
     let remaining = |d: Instant| d.saturating_duration_since(Instant::now());
     let budget = remaining(deadline);
     if budget.is_zero() {
-        return Err(format!("{}: бюджет истёк до соединения", ip));
+        return Err(format!("{}：建立连接前已超时", ip));
     }
     // Pinned to the ISP link while a tunnel holds the default route (P13): a
     // provider that substitutes only for Russian addresses answers a query that
@@ -763,13 +763,13 @@ fn handshake(
         budget,
         crate::net::pin_interface(),
     )
-    .map_err(|_| format!("{}: нет соединения", ip))?;
+    .map_err(|_| format!("{}：未建立连接", ip))?;
     sock.set_nodelay(true).ok();
 
-    let server = ServerName::try_from(ep.host.to_string())
-        .map_err(|_| "неверное имя DoH-сервера".to_string())?;
+    let server =
+        ServerName::try_from(ep.host.to_string()).map_err(|_| "DoH 服务器名称无效".to_string())?;
     let mut conn = ClientConnection::new(tls_config(ip), server)
-        .map_err(|e| format!("TLS не настроен: {}", e))?;
+        .map_err(|e| format!("无法配置 TLS：{}", e))?;
 
     // Driven by hand so the budget covers the whole handshake rather than each
     // syscall inside it - the same shape `resolvers::reachable` uses, and for
@@ -778,27 +778,27 @@ fn handshake(
     while conn.is_handshaking() {
         let left = remaining(deadline);
         if left.is_zero() {
-            return Err(format!("{}: TLS не уложился в бюджет", ip));
+            return Err(format!("{}：TLS 握手超时", ip));
         }
         sock.set_read_timeout(Some(left)).ok();
         sock.set_write_timeout(Some(left)).ok();
         if conn.wants_write() {
             conn.write_tls(&mut sock)
-                .map_err(|_| format!("{}: обрыв при handshake", ip))?;
+                .map_err(|_| format!("{}：握手时连接中断", ip))?;
         }
         if conn.is_handshaking() && conn.wants_read() {
             match conn.read_tls(&mut sock) {
-                Ok(0) => return Err(format!("{}: сервер закрыл handshake", ip)),
+                Ok(0) => return Err(format!("{}：服务器终止握手", ip)),
                 Ok(_) => conn
                     .process_new_packets()
                     .map(|_| ())
-                    .map_err(|e| format!("{}: TLS отклонён: {}", ip, e))?,
-                Err(_) => return Err(format!("{}: обрыв при handshake", ip)),
+                    .map_err(|e| format!("{}：TLS 被拒绝：{}", ip, e))?,
+                Err(_) => return Err(format!("{}：握手时连接中断", ip)),
             }
         }
     }
     if conn.alpn_protocol() != Some(b"h2") {
-        return Err(format!("{}: сервер не согласовал h2", ip));
+        return Err(format!("{}：服务器未协商 HTTP/2", ip));
     }
     Ok((sock, conn))
 }
@@ -837,7 +837,7 @@ fn read_reply(
             let len = u32::from_be_bytes([0, buf[0], buf[1], buf[2]]) as usize;
             if len > MAX_BODY {
                 return Err(Fail::Broken(format!(
-                    "{}: кадр длиной {} — не ответ DNS",
+                    "{}：数据帧长度为 {}，不是有效的 DNS 响应",
                     ip, len
                 )));
             }
@@ -870,7 +870,7 @@ fn read_reply(
                     started = true;
                     body.extend_from_slice(&payload);
                     if body.len() > MAX_BODY {
-                        return Err(Fail::Broken(format!("{}: ответ слишком велик", ip)));
+                        return Err(Fail::Broken(format!("{}：响应过大", ip)));
                     }
                     if flags & FLAG_END_STREAM != 0 {
                         return Ok(Answer { body, last: goaway });
@@ -882,7 +882,7 @@ fn read_reply(
                     // so beats returning bytes that will fail to parse as DNS.
                     if flags & FLAG_END_STREAM != 0 {
                         return if body.is_empty() {
-                            Err(Fail::Broken(format!("{}: ответ без тела", ip)))
+                            Err(Fail::Broken(format!("{}：响应没有正文", ip)))
                         } else {
                             Ok(Answer { body, last: goaway })
                         };
@@ -890,7 +890,7 @@ fn read_reply(
                 }
                 FRAME_RST_STREAM if id == stream => {
                     return Err(Fail::Broken(format!(
-                        "{}: поток сброшен, код {}",
+                        "{}：数据流被重置，错误码 {}",
                         ip,
                         word(0)
                     )));
@@ -898,7 +898,11 @@ fn read_reply(
                 FRAME_GOAWAY => {
                     let last_id = word(0) & 0x7fff_ffff;
                     if last_id < stream {
-                        return Err(Fail::Gone(format!("{}: GOAWAY, код {}", ip, word(4))));
+                        return Err(Fail::Gone(format!(
+                            "{}：收到 GOAWAY，错误码 {}",
+                            ip,
+                            word(4)
+                        )));
                     }
                     // Our stream is still answered; nothing after it will be.
                     goaway = true;
@@ -909,19 +913,19 @@ fn read_reply(
 
         let left = deadline.saturating_duration_since(Instant::now());
         if left.is_zero() {
-            return Err(Fail::Broken(format!("{}: DoH не ответил в срок", ip)));
+            return Err(Fail::Broken(format!("{}：DoH 响应超时", ip)));
         }
         let n = match tls.read(&mut chunk) {
             Ok(n) => n,
             Err(e) if matches!(e.kind(), ErrorKind::TimedOut | ErrorKind::WouldBlock) => {
-                return Err(Fail::Broken(format!("{}: DoH не ответил в срок", ip)));
+                return Err(Fail::Broken(format!("{}：DoH 响应超时", ip)));
             }
-            Err(_) => return Err(lost(started, format!("{}: обрыв ответа", ip))),
+            Err(_) => return Err(lost(started, format!("{}：响应中断", ip))),
         };
         // An end before END_STREAM is a cut, not an answer - even with some
         // DATA in hand, those bytes are a truncated DNS message.
         if n == 0 {
-            return Err(lost(started, format!("{}: сервер закрыл соединение", ip)));
+            return Err(lost(started, format!("{}：服务器关闭了连接", ip)));
         }
         buf.extend_from_slice(&chunk[..n]);
     }
@@ -1079,11 +1083,7 @@ mod tests {
         let h = request_headers("dns.example", &long);
         // Length is 415 = 127 + 288 -> prefix octet then two continuation octets.
         let idx = h.windows(3).position(|w| w == [127, 160, 2]).map(|i| i);
-        assert!(
-            idx.is_some(),
-            "длина пути закодирована неверно: {:?}",
-            &h[..24]
-        );
+        assert!(idx.is_some(), "路径长度编码错误：{:?}", &h[..24]);
         assert!(h.ends_with(b"application/dns-message"));
     }
 
@@ -1107,7 +1107,7 @@ mod tests {
         assert_eq!(h[2], 0x01, ":authority, literal without indexing");
         assert_eq!(h[path_at], 0x04, ":path, literal without indexing");
         for at in [2, path_at] {
-            assert_ne!(h[at] & 0xc0, 0x40, "октет {}: incremental indexing", at);
+            assert_ne!(h[at] & 0xc0, 0x40, "字节 {}：增量索引", at);
         }
     }
 
@@ -1233,7 +1233,7 @@ mod tests {
         assert!(out.unwrap_err().contains("GOAWAY"));
 
         let (out, _) = run(frame(FRAME_RST_STREAM, 0, 1, &[0, 0, 0, 8]));
-        assert!(out.unwrap_err().contains("сброшен"));
+        assert!(out.unwrap_err().contains("被重置"));
     }
 
     #[test]
@@ -1245,7 +1245,7 @@ mod tests {
             &[0x88],
         );
         let (out, _) = run(script);
-        assert!(out.unwrap_err().contains("без тела"));
+        assert!(out.unwrap_err().contains("没有正文"));
     }
 
     /// A length field larger than any DNS reply must be refused outright rather
@@ -1253,7 +1253,7 @@ mod tests {
     #[test]
     fn an_absurd_frame_length_is_refused() {
         let (out, _) = run(vec![0xff, 0xff, 0xff, FRAME_DATA, 0, 0, 0, 0, 1]);
-        assert!(out.unwrap_err().contains("не ответ DNS"));
+        assert!(out.unwrap_err().contains("不是有效的 DNS 响应"));
     }
 
     /// The second query on a connection is stream 3: DATA for any other stream
@@ -1276,7 +1276,7 @@ mod tests {
         let answer = read_stream(&mut s, &mut buf, 3).unwrap();
         assert_eq!(answer.body, b"mine");
         assert!(!answer.last);
-        assert_eq!(buf, expected_tail, "хвост после END_STREAM потерян");
+        assert_eq!(buf, expected_tail, "END_STREAM 后的剩余数据丢失");
         assert!(s.written.is_empty(), "the PING belongs to the next call");
     }
 
@@ -1321,7 +1321,7 @@ mod tests {
         script.extend_from_slice(&frame(FRAME_DATA, FLAG_END_STREAM, 3, b"ok"));
         let answer = read_stream(&mut scripted(script), &mut Vec::new(), 3).unwrap();
         assert_eq!(answer.body, b"ok");
-        assert!(answer.last, "после GOAWAY соединение не возвращают в пул");
+        assert!(answer.last, "收到 GOAWAY 后不应将连接放回连接池");
     }
 
     /// GOAWAY below our stream: the server says it will not process it. That is
@@ -1355,7 +1355,7 @@ mod tests {
     #[test]
     fn a_short_rst_stream_is_an_error_not_a_panic() {
         let (out, _) = run(frame(FRAME_RST_STREAM, 0, 1, &[0]));
-        assert!(out.unwrap_err().contains("сброшен"));
+        assert!(out.unwrap_err().contains("被重置"));
     }
 
     #[test]
@@ -1364,7 +1364,10 @@ mod tests {
         let s = Duration::from_secs;
         assert!(takeable(t0, 0, t0));
         assert!(takeable(t0, 1, t0 + s(19)));
-        assert!(!takeable(t0, 1, t0 + IDLE_LIMIT), "простой 20 с — уже нет");
+        assert!(
+            !takeable(t0, 1, t0 + IDLE_LIMIT),
+            "空闲 20 秒的连接已不可用"
+        );
         assert!(!takeable(t0, 1, t0 + s(29)));
         assert!(takeable(t0, MAX_REQUESTS - 1, t0 + s(1)));
         assert!(!takeable(t0, MAX_REQUESTS, t0 + s(1)));
@@ -1387,7 +1390,7 @@ mod tests {
         assert!(keep_after(&answer(false), MAX_REQUESTS - 1));
         assert!(
             !keep_after(&answer(false), MAX_REQUESTS),
-            "исчерпан лимит запросов"
+            "已达到请求次数上限"
         );
     }
 
@@ -1424,7 +1427,7 @@ mod tests {
 
             assert_eq!(&reply[0..2], &q[0..2], "id must come back");
             let got = dns_client::answer_addrs(&reply);
-            assert!(!got.is_empty(), "{}: пустой ответ", name);
+            assert!(!got.is_empty(), "{}：响应为空", name);
 
             let reference = dns_client::resolve_a_via(name, "8.8.8.8".parse().unwrap(), 0)
                 .expect("reference resolver");
@@ -1438,11 +1441,10 @@ mod tests {
             });
             assert!(
                 !passthrough,
-                "{}: ответ {:?} лежит в той же /16, что и эталон {:?} - это passthrough, \
-                 а не подмена",
+                "{}：响应地址 {:?} 与参考地址 {:?} 位于同一 /16 网段，属于透传而非地址替换",
                 name, got, reference
             );
-            println!("{} -> {:?} (эталон {:?})", name, got, reference);
+            println!("{} -> {:?}（参考地址 {:?}）", name, got, reference);
         }
     }
 
@@ -1481,16 +1483,16 @@ mod tests {
                     IpAddr::V6(_) => false,
                 });
                 println!(
-                    "{:<15} {:<34} {:>4} мс  {:?}",
+                    "{:<15} {:<34} {:>4} 毫秒  {:?}",
                     addr,
                     name,
                     started.elapsed().as_millis(),
                     got
                 );
-                assert!(!got.is_empty(), "{} {}: пустой ответ", addr, name);
+                assert!(!got.is_empty(), "{} {}：响应为空", addr, name);
                 assert!(
                     !passthrough,
-                    "{} {}: {:?} — подлинный Google, узел не подменяет",
+                    "{} {}：{:?} 为 Google 原始地址，该节点未替换解析结果",
                     addr, name, got
                 );
             }
@@ -1525,9 +1527,9 @@ mod tests {
             .filter(|&ip| node_resumes(ep, ip))
             .collect();
         for ip in ips.iter().filter(|ip| !resuming.contains(ip)) {
-            println!("{}: узел не принимает даже свои билеты — пропущен", ip);
+            println!("{}：节点拒绝其自身签发的会话票据，已跳过", ip);
         }
-        assert!(!resuming.is_empty(), "ни один узел не возобновляет сессии");
+        assert!(!resuming.is_empty(), "没有节点支持会话恢复");
         let q = dns_client::build_query("cloudcode-pa.googleapis.com", 0x5151);
 
         // One exchange per node, in walk order, each on a connection that was
@@ -1552,7 +1554,7 @@ mod tests {
             assert_eq!(
                 conn.handshake_kind(),
                 Some(HandshakeKind::Resumed),
-                "{}: полное рукопожатие — предъявлен чужой билет",
+                "{}：使用其他节点的票据，需执行完整握手",
                 ip
             );
         }
@@ -1613,13 +1615,13 @@ mod tests {
     /// least one address. "Valid DNS" and not just "bytes came back" - an
     /// error page or a frame from the wrong stream fails here.
     fn assert_answers(q: &[u8], reply: &[u8]) {
-        assert!(reply.len() >= 12, "короткий ответ: {:?}", reply);
+        assert!(reply.len() >= 12, "响应过短：{:?}", reply);
         assert_eq!(&reply[0..2], &q[0..2], "id must come back");
-        assert_ne!(reply[2] & 0x80, 0, "QR: это не ответ");
+        assert_ne!(reply[2] & 0x80, 0, "QR 标记表明这不是响应");
         assert_eq!(reply[3] & 0x0f, 0, "RCODE {}", reply[3] & 0x0f);
         assert!(
             !crate::dns_client::answer_addrs(reply).is_empty(),
-            "ни одного адреса"
+            "没有地址"
         );
     }
 
@@ -1656,19 +1658,19 @@ mod tests {
         for i in 0..50u16 {
             let q = dns_client::build_query(names[i as usize % 2], 0x1000 + i);
             let reply = query_via(&pool, ep, &q, Duration::from_secs(8))
-                .unwrap_or_else(|e| panic!("запрос {}: {}", i, e));
+                .unwrap_or_else(|e| panic!("请求 {}：{}", i, e));
             assert_answers(&q, &reply);
         }
         let opened = pool.opened.load(Relaxed);
         let dropped = pool.dropped.load(Relaxed);
         let retried = pool.retried.load(Relaxed);
         println!(
-            "50 запросов: {} соединений; выброшено после запроса {}, из них {} закрыл сервер",
+            "50 次请求：{} 个连接；第 {} 次请求后丢弃连接，其中 {} 次由服务器关闭",
             opened, dropped, retried
         );
         assert!(
             opened <= ep.addrs.len() + dropped,
-            "{} соединений на {} адреса при {} выброшенных - клиент открывает лишние",
+            "共 {} 个连接、{} 个地址、{} 次丢弃，客户端建立了多余连接",
             opened,
             ep.addrs.len(),
             dropped
@@ -1677,7 +1679,7 @@ mod tests {
         for (i, addr) in ep.addrs.iter().enumerate() {
             let ip: IpAddr = addr.parse().unwrap();
             if !node_resumes(ep, ip) {
-                println!("{}: узел не принимает даже свои билеты — пропущен", ip);
+                println!("{}：节点拒绝其自身签发的会话票据，已跳过", ip);
                 continue;
             }
             let mut kinds = String::new();
@@ -1694,8 +1696,8 @@ mod tests {
                     'F'
                 });
             }
-            println!("{}: после сброса пула {}", ip, kinds);
-            assert_ne!(kinds, "FF", "{}: два полных рукопожатия подряд", ip);
+            println!("{}：重置连接池后 {}", ip, kinds);
+            assert_ne!(kinds, "FF", "{}：连续执行两次完整握手", ip);
         }
         pool.clear();
     }
@@ -1732,14 +1734,11 @@ mod tests {
         let mut on = 0usize;
         let mut sent = 0u16;
         while carried <= 70_000 {
-            assert!(
-                sent < 300,
-                "за 300 запросов ни одно соединение не набрало 70 КБ"
-            );
+            assert!(sent < 300, "300 次请求中没有连接达到 70 KB");
             let name = ["microsoft.com", "amazon.com"][sent as usize % 2];
             let q = txt_query(name, 0x3000 + sent);
             let reply = query_one(&pool, ep, ip, &q, Duration::from_secs(8))
-                .unwrap_or_else(|e| panic!("после {} байт по соединению: {}", carried, e));
+                .unwrap_or_else(|e| panic!("连接传输 {} 字节后：{}", carried, e));
             assert_eq!(&reply[0..2], &q[0..2]);
             let now_on = pool.opened.load(Relaxed);
             if now_on != on {
@@ -1750,7 +1749,7 @@ mod tests {
             sent += 1;
         }
         println!(
-            "{} байт по одному соединению; {} запросов, {} соединений",
+            "单条连接传输 {} 字节；共 {} 次请求、{} 个连接",
             carried,
             sent,
             pool.opened.load(Relaxed)

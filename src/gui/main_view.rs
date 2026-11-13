@@ -98,7 +98,7 @@ fn status_card(app: &mut App, ui: &mut egui::Ui) {
         widgets::card(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.add(egui::Spinner::new().size(16.0));
-                ui.label(egui::RichText::new("Проверяю систему…").size(15.0));
+                ui.label(egui::RichText::new("正在检查系统…").size(15.0));
             });
         });
         return;
@@ -129,7 +129,8 @@ fn status_card(app: &mut App, ui: &mut egui::Ui) {
         .show(ui, |ui| {
             ui.set_min_width(ui.available_width());
             ui.horizontal(|ui| {
-                let (rect, _) = ui.allocate_exact_size(egui::vec2(14.0, 14.0), egui::Sense::hover());
+                let (rect, _) =
+                    ui.allocate_exact_size(egui::vec2(14.0, 14.0), egui::Sense::hover());
                 ui.painter().circle_filled(rect.center(), 6.0, accent);
                 ui.label(
                     egui::RichText::new(&h.title)
@@ -160,16 +161,23 @@ fn status_card(app: &mut App, ui: &mut egui::Ui) {
                     .filter(|(at, _)| at.elapsed() < REPORT_SHOWN_FOR);
                 ui.horizontal(|ui| {
                     if ui
-                        .add_enabled(!busy, egui::Button::new(egui::RichText::new("Сохранить отчёт").size(12.5)))
-                        .on_hover_text("Всё, что нужно, чтобы понять, почему Antigravity отвечает или нет — одним файлом на рабочем столе: приложите его к сообщению")
+                        .add_enabled(
+                            !busy,
+                            egui::Button::new(egui::RichText::new("保存诊断报告").size(12.5)),
+                        )
+                        .on_hover_text(
+                            "将运行状态和连接诊断保存为桌面上的一个文件，便于排查问题和反馈。",
+                        )
                         .clicked()
                     {
                         copy = true;
                     }
                     if let Some((_, path)) = &saved {
                         if ui
-                            .add(egui::Button::new(egui::RichText::new("Показать файл").size(12.5)))
-                            .on_hover_text("Открыть папку с отчётом")
+                            .add(egui::Button::new(
+                                egui::RichText::new("查看文件").size(12.5),
+                            ))
+                            .on_hover_text("打开报告所在文件夹")
                             .clicked()
                         {
                             reveal = Some(path.clone());
@@ -180,7 +188,7 @@ fn status_card(app: &mut App, ui: &mut egui::Ui) {
                     ui.add_space(4.0);
                     ui.label(
                         egui::RichText::new(format!(
-                            "Отчёт сохранён на рабочий стол: «{}». Приложите этот файл к сообщению.",
+                            "报告已保存到桌面：“{}”。反馈问题时可附上此文件。",
                             path.file_name()
                                 .map(|f| f.to_string_lossy().into_owned())
                                 .unwrap_or_default()
@@ -197,7 +205,7 @@ fn status_card(app: &mut App, ui: &mut egui::Ui) {
                     ui.add_space(4.0);
                     ui.label(
                         egui::RichText::new(
-                            "Файл сохранить не удалось — отчёт скопирован, вставьте его в сообщение.",
+                            "文件保存失败，报告已复制到剪贴板，可粘贴到反馈消息中。",
                         )
                         .size(12.5)
                         .color(theme::WARN),
@@ -277,7 +285,7 @@ fn antigravity_card(app: &mut App, ui: &mut egui::Ui) {
         ui.separator();
         ui.add_space(8.0);
         ui.label(
-            egui::RichText::new("Найденные установки Antigravity")
+            egui::RichText::new("检测到的 Antigravity 安装")
                 .size(12.5)
                 .color(theme::MUTED),
         );
@@ -305,7 +313,7 @@ fn bypass_master(app: &mut App, ui: &mut egui::Ui) {
 
 fn install_rows(app: &mut App, ui: &mut egui::Ui) {
     let Some(rows) = app.status.as_ref().map(|s| s.installs.clone()) else {
-        widgets::hint(ui, "Идёт поиск…");
+        widgets::hint(ui, "正在查找…");
         return;
     };
 
@@ -342,7 +350,7 @@ fn install_rows(app: &mut App, ui: &mut egui::Ui) {
                 }
                 None => {
                     ui.label(
-                        egui::RichText::new("не найдено — укажите путь")
+                        egui::RichText::new("未找到，请指定安装路径")
                             .size(12.0)
                             .color(theme::MUTED),
                     );
@@ -354,7 +362,7 @@ fn install_rows(app: &mut App, ui: &mut egui::Ui) {
                     if let Some(p) = &row.path {
                         if ui
                             .small_button("✖")
-                            .on_hover_text("Убрать указанный путь")
+                            .on_hover_text("移除此手动添加的路径")
                             .clicked()
                         {
                             forget = Some(p.clone());
@@ -363,18 +371,14 @@ fn install_rows(app: &mut App, ui: &mut egui::Ui) {
                 }
                 if let (Some(path), Some(false)) = (&row.path, row.patched) {
                     if ui
-                        .small_button("Пропатчить")
-                        .on_hover_text("Наложить патч на эту установку")
+                        .small_button("应用补丁")
+                        .on_hover_text("为此安装应用补丁")
                         .clicked()
                     {
                         patch = Some(path.clone());
                     }
                 }
-                if ui
-                    .small_button("✏")
-                    .on_hover_text("Указать путь вручную")
-                    .clicked()
-                {
+                if ui.small_button("✏").on_hover_text("手动指定路径").clicked() {
                     edit = Some(
                         row.path
                             .as_ref()
@@ -413,7 +417,7 @@ fn advanced_card(app: &mut App, ui: &mut egui::Ui) {
     // buttons there is room for it, and the user opens nothing to see what is
     // switched on.
     ui.label(
-        egui::RichText::new("Настройки для опытных")
+        egui::RichText::new("高级设置")
             .size(13.0)
             .color(theme::MUTED),
     );
@@ -463,9 +467,9 @@ fn vpn_exclusion_button(app: &mut App, ui: &mut egui::Ui) {
         .vpn_path_copied
         .is_some_and(|at| at.elapsed() < Duration::from_secs(5));
     let label = if copied {
-        "Путь до анлокера скопирован"
+        "已复制解锁器路径"
     } else {
-        "Добавить анлокер в исключения VPN"
+        "将解锁器加入 VPN 排除列表"
     };
     ui.horizontal(|ui| {
         if ui
@@ -482,8 +486,7 @@ fn vpn_exclusion_button(app: &mut App, ui: &mut egui::Ui) {
     if info_open(ui, "vpn-info") {
         widgets::hint(
             ui,
-            "Копирует путь к этой программе. Вставьте его в список исключений вашего VPN \
-             (раздельное туннелирование), чтобы её соединения шли мимо VPN.",
+            "复制本程序的路径。将其添加到 VPN 的分流排除列表，让解锁器的连接绕过 VPN。",
         );
     }
     if copied {
@@ -499,29 +502,28 @@ fn network_facts(app: &App, ui: &mut egui::Ui) {
         return;
     };
     let vpn = if !r.tunnel {
-        "VPN не обнаружен.".to_string()
+        "未检测到 VPN。".to_string()
     } else if r.vpn_exit.is_empty() {
-        "VPN включён — соединения службы с сервисами разблокировки идут мимо него.".to_string()
+        "VPN 已启用，后台服务会绕过 VPN 连接解锁服务。".to_string()
     } else if crate::upstream::region_is_blocked(&r.vpn_exit) {
         format!(
-            "VPN включён, выход: {} — там ошибка 400, поэтому соединения идут мимо него.",
+            "VPN 已启用，出口：{}；该出口返回错误 400，后台连接将绕过 VPN。",
             r.vpn_exit
         )
     } else {
         format!(
-            "VPN включён, выход: {} — используется как один из путей.",
+            "VPN 已启用，出口：{}；此出口将作为候选线路之一。",
             r.vpn_exit
         )
     };
     widgets::hint(ui, &vpn);
     if !r.route.is_empty() {
-        widgets::hint(ui, &format!("Первый путь сейчас: {}.", r.route));
+        widgets::hint(ui, &format!("当前首选线路：{}。", r.route));
     }
     if !r.loopback {
         widgets::hint(
             ui,
-            "Служба ещё не перехватывает имена серверов Google — Antigravity идёт через них, \
-             только если перезапущен после включения обхода.",
+            "后台服务尚未接管 Google 域名解析。启用后需重启 Antigravity，才能让请求经过解锁线路。",
         );
     }
     ui.add_space(8.0);
@@ -560,7 +562,7 @@ fn providers_list(app: &mut App, ui: &mut egui::Ui) {
     let mut dropped = false;
 
     egui::CollapsingHeader::new(
-        egui::RichText::new("Какие DNS использовать")
+        egui::RichText::new("选择 DNS 服务")
             .size(12.5)
             .color(theme::MUTED),
     )
@@ -570,17 +572,14 @@ fn providers_list(app: &mut App, ui: &mut egui::Ui) {
         let first_on = providers.iter().position(|p| p.enabled);
         ui.horizontal(|ui| {
             ui.label(
-                egui::RichText::new("Порядок — перетаскиванием за «≡»")
+                egui::RichText::new("拖动“≡”调整顺序")
                     .size(12.0)
                     .color(theme::MUTED),
             );
             info_toggle(ui, "providers-info");
         });
         if info_open(ui, "providers-info") {
-            widgets::hint(
-                ui,
-                "Зажмите полоски слева и перетащите. Первый в списке спрашивается первым.",
-            );
+            widgets::hint(ui, "按住左侧拖动手柄调整顺序，列表顶部的服务器优先查询。");
         }
         ui.add_space(4.0);
 
@@ -619,9 +618,9 @@ fn providers_list(app: &mut App, ui: &mut egui::Ui) {
                         text
                     });
                     if !p.available {
-                        widgets::hint(ui, "— не задан");
+                        widgets::hint(ui, "— 未配置");
                     } else if idle {
-                        widgets::hint(ui, "— не используется");
+                        widgets::hint(ui, "— 未使用");
                     }
                 })
                 .response;
@@ -685,19 +684,24 @@ fn providers_list(app: &mut App, ui: &mut egui::Ui) {
 }
 
 fn group_proxy_field(app: &mut App, ui: &mut egui::Ui) {
+    if option_env!("AG_GROUP_AVAILABLE") != Some("1") {
+        widgets::hint(
+            ui,
+            "此构建未包含群组代理配置，请使用 DNS 解锁或自定义 HTTP 代理。",
+        );
+        return;
+    }
     let busy = app.is_busy();
     ui.add_space(4.0);
     ui.add_space(4.0);
     ui.horizontal(|ui| {
-        if ui.button("Скопировать команду").clicked() {
+        if ui.button("复制命令").clicked() {
             let cmd = format!("/ag+{}", crate::hwid::pc_code());
             crate::utils::set_clipboard_text(&cmd);
-            app.log.push((
-                Level::Info,
-                "Команда скопирована — отправьте её в группе.".to_string(),
-            ));
+            app.log
+                .push((Level::Info, "命令已复制，请发送到群组。".to_string()));
         }
-        if ui.button("Открыть группу").clicked() {
+        if ui.button("打开群组").clicked() {
             crate::utils::open_url(GROUP_ROOM_URL);
         }
         info_toggle(ui, "group-info");
@@ -705,17 +709,16 @@ fn group_proxy_field(app: &mut App, ui: &mut egui::Ui) {
     if info_open(ui, "group-info") {
         widgets::hint(
             ui,
-            "Для активации прокси из группы Nova — отправьте туда команду и вставьте \
-             полученный код в поле ниже.",
+            "如需启用 Nova 群组代理，请在群组中发送命令，再将收到的授权码粘贴到下方。",
         );
     }
     ui.add_space(4.0);
     let field = egui::TextEdit::singleline(&mut app.group_key_input)
-        .hint_text("код из группы")
+        .hint_text("粘贴群组授权码")
         .desired_width(ui.available_width());
     let resp = ui
         .add_enabled(!busy, field)
-        .on_hover_text("Правая кнопка мыши — вставить код из буфера");
+        .on_hover_text("右键粘贴剪贴板中的授权码");
     // Right click pastes: egui's field has no context menu, and the code
     // arrives on the clipboard from Telegram.
     let mut right_pasted = false;
@@ -747,7 +750,7 @@ fn custom_dns_field(app: &mut App, ui: &mut egui::Ui) {
     ui.add_space(6.0);
     ui.horizontal(|ui| {
         ui.label(
-            egui::RichText::new("Свой DNS: IPv4, DoH или DoT")
+            egui::RichText::new("自定义 DNS：IPv4、DoH 或 DoT")
                 .size(12.0)
                 .color(theme::MUTED),
         );
@@ -756,9 +759,7 @@ fn custom_dns_field(app: &mut App, ui: &mut egui::Ui) {
     if info_open(ui, "custom-dns-info") {
         widgets::hint(
             ui,
-            "Можно несколько, через пробел: обычный адрес 77.88.8.8, DoH — \
-             https://dns.example.com/dns-query, DoT — tls://dns.example.com. Пока поле пустое, \
-             этот сервер выключен.",
+            "支持多个地址，以空格分隔。例如 77.88.8.8、https://dns.example.com/dns-query（DoH）、tls://dns.example.com（DoT）。留空则停用自定义 DNS。",
         );
     }
     ui.horizontal(|ui| {
@@ -768,11 +769,7 @@ fn custom_dns_field(app: &mut App, ui: &mut egui::Ui) {
             .desired_width(ui.available_width() - 110.0);
         let resp = ui.add_enabled(!busy, field);
         let entered = resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-        if ui
-            .add_enabled(!busy, egui::Button::new("Применить"))
-            .clicked()
-            || entered
-        {
+        if ui.add_enabled(!busy, egui::Button::new("应用")).clicked() || entered {
             let text = app.custom_dns_input.clone();
             app.worker.send(Cmd::SetCustomDns(text));
         }
@@ -784,15 +781,11 @@ fn own_proxy_field(app: &mut App, ui: &mut egui::Ui) {
     ui.horizontal(|ui| {
         ui.add_space(10.0);
         let field = egui::TextEdit::singleline(&mut app.own_proxy_input)
-            .hint_text("логин:пароль@адрес:порт или адрес:порт")
+            .hint_text("用户名:密码@地址:端口，或 地址:端口")
             .desired_width(ui.available_width() - 110.0);
         let resp = ui.add_enabled(!busy, field);
         let entered = resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-        if ui
-            .add_enabled(!busy, egui::Button::new("Применить"))
-            .clicked()
-            || entered
-        {
+        if ui.add_enabled(!busy, egui::Button::new("应用")).clicked() || entered {
             let text = app.own_proxy_input.clone();
             app.worker.send(Cmd::SetOwnProxy(text));
         }
@@ -843,7 +836,7 @@ fn log_line(level: Level, line: &str) -> String {
 }
 
 fn log_card(app: &mut App, ui: &mut egui::Ui) {
-    egui::CollapsingHeader::new(egui::RichText::new("Журнал").size(13.0).color(theme::MUTED))
+    egui::CollapsingHeader::new(egui::RichText::new("日志").size(13.0).color(theme::MUTED))
         .id_salt("log")
         .default_open(dev_open())
         .show(ui, |ui| {
@@ -869,7 +862,7 @@ fn log_card(app: &mut App, ui: &mut egui::Ui) {
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     if app.log.is_empty() {
-                        widgets::hint(ui, "Пока ничего не делалось.");
+                        widgets::hint(ui, "暂无操作记录。");
                     }
                     for (level, line) in &app.log {
                         let color = match level {
@@ -969,7 +962,7 @@ fn footer(ui: &mut egui::Ui) {
             crate::utils::open_url(TELEGRAM_GROUP_URL);
         }
         ui.label(
-            egui::RichText::new("Группа в Telegram:")
+            egui::RichText::new("Telegram 群组：")
                 .size(FOOTER_TEXT)
                 .color(theme::MUTED),
         );
@@ -993,7 +986,7 @@ fn footer(ui: &mut egui::Ui) {
                 .color(egui::Color32::from_rgb(0xE0, 0x30, 0x48)),
         );
         ui.label(
-            egui::RichText::new("Благодарности")
+            egui::RichText::new("支持原作者")
                 .size(FOOTER_TEXT)
                 .color(theme::MUTED),
         );
@@ -1008,7 +1001,7 @@ pub fn path_dialog(app: &mut App, ctx: &egui::Context) {
     let mut keep_open = true;
     let mut submit = false;
 
-    egui::Window::new("Путь к Antigravity")
+    egui::Window::new("Antigravity 安装路径")
         .collapsible(false)
         .resizable(false)
         .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
@@ -1016,8 +1009,7 @@ pub fn path_dialog(app: &mut App, ctx: &egui::Context) {
             ui.set_min_width(420.0);
             widgets::hint(
                 ui,
-                "Папка установки Antigravity, IDE или CLI. Можно указать вложенную — \
-                 корень будет найден сам.",
+                "选择 Antigravity、IDE 或 CLI 的安装文件夹。也可填写其中的子文件夹，程序会自动定位安装目录。",
             );
             ui.add_space(8.0);
             ui.add(
@@ -1031,10 +1023,10 @@ pub fn path_dialog(app: &mut App, ctx: &egui::Context) {
             }
             ui.add_space(10.0);
             ui.horizontal(|ui| {
-                if widgets::primary(ui, "Добавить", !text.trim().is_empty()).clicked() {
+                if widgets::primary(ui, "添加", !text.trim().is_empty()).clicked() {
                     submit = true;
                 }
-                if widgets::ghost(ui, "Отмена").clicked() {
+                if widgets::ghost(ui, "取消").clicked() {
                     keep_open = false;
                 }
             });
@@ -1049,8 +1041,7 @@ pub fn path_dialog(app: &mut App, ctx: &egui::Context) {
                 keep_open = false;
             }
             None => {
-                app.path_dialog_error =
-                    Some("По этому пути установка Antigravity не найдена.".into());
+                app.path_dialog_error = Some("此路径下未找到 Antigravity 安装。".into());
             }
         }
     }

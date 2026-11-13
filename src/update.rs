@@ -15,9 +15,9 @@ use rustls::pki_types::ServerName;
 use rustls::{ClientConfig, ClientConnection};
 use serde::{Deserialize, Serialize};
 
-pub const RELEASES_LATEST_URL: &str = "https://github.com/confeden/Antigravity/releases/latest";
+pub const RELEASES_LATEST_URL: &str = "https://github.com/sjgld/Antigravity/releases/latest";
 const API_HOST: &str = "api.github.com";
-const API_PATH: &str = "/repos/confeden/Antigravity/releases/latest";
+const API_PATH: &str = "/repos/sjgld/Antigravity/releases/latest";
 const CHECK_INTERVAL: Duration = Duration::from_secs(8 * 60 * 60);
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
@@ -33,7 +33,7 @@ const MAX_BODY: usize = 256 * 1024;
 /// compare itself against tag `v2.12.2_3` as if it were `2.12.2`, and claim an
 /// update that does not exist.
 pub fn current_version() -> &'static str {
-    option_env!("AG_FULL_VERSION").unwrap_or(env!("CARGO_PKG_VERSION"))
+    option_env!("AG_FULL_VERSION").unwrap_or("2.31.2_1")
 }
 
 /// Information about a GitHub release asset.
@@ -87,7 +87,7 @@ struct CachedCheck {
 
 /// Returns the path to the update check cache file in the system temp directory.
 fn cache_path() -> PathBuf {
-    std::env::temp_dir().join("ag_unlocker_update_cache.json")
+    std::env::temp_dir().join("ag_unlocker_zh_cn_update_cache.json")
 }
 
 /// Compares two version strings (e.g. "v2.11.0_4" vs "2.11.0_1", "2.11.0" vs "2.10.0").
@@ -389,7 +389,7 @@ mod tests {
         let sample = r#"{
             "tag_name": "v2.11.0_4",
             "html_url": "https://github.com/confeden/Antigravity/releases/tag/v2.11.0_4",
-            "name": "Релиз v2.11.0_4",
+            "name": "版本 v2.11.0_4",
             "draft": false,
             "prerelease": false,
             "published_at": "2026-09-02T19:02:18Z",

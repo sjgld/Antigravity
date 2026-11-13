@@ -88,12 +88,12 @@ impl Kind {
     /// (I46).
     pub fn label(self) -> &'static str {
         match self {
-            Kind::Own => "свой прокси",
-            Kind::Group => "прокси из группы",
-            Kind::Exits => "встроенный выход",
-            Kind::Relay => "резервный релей",
-            Kind::Direct => "напрямую",
-            Kind::Vpn => "через ваш VPN",
+            Kind::Own => "自定义代理",
+            Kind::Group => "群组代理",
+            Kind::Exits => "内置出口",
+            Kind::Relay => "备用转发",
+            Kind::Direct => "直连",
+            Kind::Vpn => "通过 VPN",
         }
     }
 }
@@ -358,7 +358,9 @@ pub fn record_failure(kind: Kind) {
 pub fn probe_failed(kind: Kind) {
     // Background checks use separate connections. A failed new connection is
     // weaker evidence than a model answer on the still-open current one.
-    if is_streaming(kind) { return; }
+    if is_streaming(kind) {
+        return;
+    }
     record_failure(kind);
     stumble_for(kind, PROBE_STUMBLE_FOR);
 }
@@ -673,7 +675,9 @@ pub fn leader() -> Option<Kind> {
 /// in the log when it changed. Run once per warm pass, after the probes.
 pub fn refresh_leader(usable: impl Fn(Kind) -> bool) {
     let s = snapshot();
-    if s.leader.is_some_and(is_streaming) { return; }
+    if s.leader.is_some_and(is_streaming) {
+        return;
+    }
     let order = order_with(&s, usable);
     let Some(&best) = order.first() else {
         return;
@@ -685,16 +689,16 @@ pub fn refresh_leader(usable: impl Fn(Kind) -> bool) {
         t.leader = Some(best);
     }
     let describe = |k: Kind| match fresh(&s.samples, k) {
-        Some(d) => format!("{} ({} мс)", k.label(), d.as_millis()),
-        None => format!("{} (не измерен)", k.label()),
+        Some(d) => format!("{}（{} 毫秒）", k.label(), d.as_millis()),
+        None => format!("{}（尚未测速）", k.label()),
     };
     let line = match s.leader {
         Some(prev) => format!(
-            "маршрут гейт-хостов: {}, было {}",
+            "Google 目标线路：{}，原为 {}",
             describe(best),
             describe(prev)
         ),
-        None => format!("маршрут гейт-хостов: {}", describe(best)),
+        None => format!("Google 目标线路：{}", describe(best)),
     };
     note(&line);
 }
@@ -984,7 +988,7 @@ fn end_gate_connection() {
     if let Some(kind) = went_silent {
         if let Some(bench) = silence(kind, live_answer(kind).is_some()) {
             note(&format!(
-                "{}: соединение открылось, но Google не ответил ни байта — маршрут отложен на {} мин, следующие соединения идут другим путём",
+                "{}：连接已建立，但 Google 未返回数据，暂缓使用 {} 分钟，后续连接将切换线路",
                 kind.label(),
                 bench.as_secs() / 60
             ));
@@ -1183,9 +1187,18 @@ pub fn dns_endpoint(id: u64) -> Option<(String, std::net::Ipv4Addr)> {
 }
 
 pub fn streaming_dns_endpoints(host: &str) -> Vec<std::net::Ipv4Addr> {
-    let Ok(list) = TUNNELS.lock() else { return Vec::new(); };
-    list.iter().filter(|t| t.kind == Kind::Direct && t.host == host
-        && t.closed.is_none() && t.answered_at.is_some()).filter_map(|t| t.peer).collect()
+    let Ok(list) = TUNNELS.lock() else {
+        return Vec::new();
+    };
+    list.iter()
+        .filter(|t| {
+            t.kind == Kind::Direct
+                && t.host == host
+                && t.closed.is_none()
+                && t.answered_at.is_some()
+        })
+        .filter_map(|t| t.peer)
+        .collect()
 }
 
 pub fn is_streaming(kind: Kind) -> bool {
@@ -1930,9 +1943,20 @@ mod tests {
         probe_failed(Kind::Exits);
         record(Kind::Relay, ms(1));
         refresh_leader(|k| matches!(k, Kind::Exits | Kind::Relay));
-        assert_eq!(latency(Kind::Exits), measured, "a failed background probe cannot erase live proof");
-        assert_eq!(leader(), Some(Kind::Exits), "a faster probe cannot move a streaming leader");
-        assert_eq!(order(|k| matches!(k, Kind::Exits | Kind::Relay))[0], Kind::Exits);
+        assert_eq!(
+            latency(Kind::Exits),
+            measured,
+            "a failed background probe cannot erase live proof"
+        );
+        assert_eq!(
+            leader(),
+            Some(Kind::Exits),
+            "a faster probe cannot move a streaming leader"
+        );
+        assert_eq!(
+            order(|k| matches!(k, Kind::Exits | Kind::Relay))[0],
+            Kind::Exits
+        );
 
         match blame(Kind::Exits) {
             Blamed::Streaming { to_client, .. } => assert_eq!(to_client, 8 * 1024),

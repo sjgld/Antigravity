@@ -1,0 +1,38 @@
+name: Windows 简体中文版
+
+on:
+  push:
+    branches: [zh-CN]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: windows-zh-cn
+      - name: 检查中文化覆盖
+        run: python tools/check_localization.py
+      - name: 测试
+        run: cargo test --locked --release
+      - name: 编译 Windows 版本
+        run: cargo build --locked --release
+      - name: 准备便携版
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path dist | Out-Null
+          Copy-Item target/release/ag_unlocker.exe dist/AG_2.31.2_1.exe
+          Copy-Item LICENSE dist/LICENSE.txt
+          Copy-Item assets/fonts/OFL.txt dist/FONT-LICENSE.txt
+          Copy-Item README.md dist/README.md
+          (Get-FileHash dist/AG_2.31.2_1.exe -Algorithm SHA256).Hash + '  AG_2.31.2_1.exe' | Set-Content dist/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Antigravity-Unlocker-2.31.2_1-zh-CN-windows
+          path: dist/

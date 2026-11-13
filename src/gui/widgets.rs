@@ -195,7 +195,7 @@ pub fn info_button(ui: &mut egui::Ui, lit: bool) -> egui::Response {
         );
     }
     resp.on_hover_cursor(egui::CursorIcon::PointingHand)
-        .on_hover_text("Что это")
+        .on_hover_text("功能说明")
 }
 
 /// A coloured status dot, for install rows and provider rows.

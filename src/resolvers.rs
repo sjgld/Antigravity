@@ -52,6 +52,15 @@ pub enum Transport {
 /// deny-list and the saved order are keyed by, so it never changes.
 pub const CUSTOM_NAME: &str = "свой DNS";
 
+/// Human-readable name; persisted provider IDs stay compatible with upstream.
+pub fn display_provider_name(name: &str) -> &str {
+    if name == CUSTOM_NAME {
+        "自定义 DNS"
+    } else {
+        name
+    }
+}
+
 /// One server the user typed into the «свой DNS» slot.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CustomServer {
@@ -84,7 +93,7 @@ impl CustomServer {
 /// credential or an IPv6 bracket into a place that expects a bare name.
 fn valid_host(host: &str) -> Result<(), String> {
     if host.is_empty() || host.len() > 253 {
-        return Err("пустой адрес сервера".into());
+        return Err("服务器地址为空".into());
     }
     if !host
         .chars()
@@ -93,14 +102,14 @@ fn valid_host(host: &str) -> Result<(), String> {
         || host.starts_with('-')
         || host.ends_with('-')
     {
-        return Err(format!("«{}» — не адрес сервера", host));
+        return Err(format!("“{}”不是有效的服务器地址", host));
     }
     if let Ok(ip) = host.parse::<Ipv4Addr>() {
         if ip.is_loopback() || ip.is_unspecified() || ip.is_multicast() {
-            return Err(format!("{} не подходит: это не внешний сервер", host));
+            return Err(format!("{} 不是外部服务器地址", host));
         }
     } else if !host.contains('.') {
-        return Err(format!("«{}» — не адрес сервера", host));
+        return Err(format!("“{}”不是有效的服务器地址", host));
     }
     Ok(())
 }
@@ -122,7 +131,7 @@ pub fn parse_custom_server(token: &str) -> Result<CustomServer, String> {
         };
         let host = match hostport.rsplit_once(':') {
             Some((h, "443")) => h,
-            Some(_) => return Err(format!("{}: для DoH поддерживается только порт 443", token)),
+            Some(_) => return Err(format!("{}：DoH 仅支持端口 443", token)),
             None => hostport,
         };
         let host = host.to_ascii_lowercase();
@@ -132,7 +141,7 @@ pub fn parse_custom_server(token: &str) -> Result<CustomServer, String> {
                 .chars()
                 .any(|c| c.is_whitespace() || c == '?' || c == '#')
         {
-            return Err(format!("{}: путь DoH указан неверно", token));
+            return Err(format!("{}：DoH 路径无效", token));
         }
         return Ok(CustomServer::Doh {
             host,
@@ -150,7 +159,7 @@ pub fn parse_custom_server(token: &str) -> Result<CustomServer, String> {
                 p.parse::<u16>()
                     .ok()
                     .filter(|p| *p != 0)
-                    .ok_or_else(|| format!("{}: неверный порт", token))?,
+                    .ok_or_else(|| format!("{}：端口无效", token))?,
             ),
             None => (rest, 853),
         };
@@ -161,11 +170,11 @@ pub fn parse_custom_server(token: &str) -> Result<CustomServer, String> {
         });
     }
     if lower.starts_with("http://") {
-        return Err(format!("{}: для DoH нужен https://", token));
+        return Err(format!("{}：DoH 地址必须使用 https://", token));
     }
     if lower.contains("://") {
         return Err(format!(
-            "{}: поддерживаются IPv4-адрес, https:// (DoH) и tls:// (DoT)",
+            "{}：支持 IPv4 地址、https://（DoH）和 tls://（DoT）",
             token
         ));
     }
@@ -173,13 +182,13 @@ pub fn parse_custom_server(token: &str) -> Result<CustomServer, String> {
         Ok(ip) => {
             if ip.is_loopback() || ip.is_unspecified() || ip.is_multicast() {
                 // The relay itself listens on 127.0.0.53: pointing it at itself loops.
-                Err(format!("{} не подходит: это не внешний сервер", token))
+                Err(format!("{} 不是外部服务器地址", token))
             } else {
                 Ok(CustomServer::Udp(ip))
             }
         }
         Err(_) => Err(format!(
-            "{}: нужен IPv4-адрес, https://… (DoH) или tls://… (DoT)",
+            "{}：请填写 IPv4 地址、https://…（DoH）或 tls://…（DoT）",
             token
         )),
     }
@@ -203,7 +212,7 @@ pub fn parse_custom_dns(text: &str) -> Result<Vec<CustomServer>, String> {
         }
     }
     if out.len() > 8 {
-        return Err("Слишком много серверов — не больше 8.".into());
+        return Err("最多可添加 8 个服务器。".into());
     }
     Ok(out)
 }
@@ -2422,7 +2431,7 @@ mod tests {
     /// says stand down, and the force expires on its own.
     #[test]
     fn the_vpn_flag_defaults_to_off_and_round_trips() {
-        assert!(!vpn_is_active(), "должно быть выключено по умолчанию");
+        assert!(!vpn_is_active(), "默认应为关闭状态");
         set_vpn_active(true);
         assert!(vpn_is_active());
 
@@ -2752,7 +2761,7 @@ mod tests {
             for (idx, p) in PROVIDERS.iter().enumerate() {
                 let known = known_proxy_addrs(idx);
                 match ask_provider(p, &query, 0, QUERY_TIMEOUT) {
-                    None => println!("  {:<12} нет ответа", p.name),
+                    None => println!("  {:<12} 无响应", p.name),
                     Some(reply) => {
                         let addrs = dns_client::answer_addrs(&reply);
                         // Wire counts alongside the parsed addresses: an empty
@@ -2775,7 +2784,7 @@ mod tests {
                             addrs,
                             classify(&addrs, &reference, &known),
                             if known.is_empty() {
-                                "исключён (прокси-набор не выучен)".to_string()
+                                "已排除，尚未获取代理地址池".to_string()
                             } else {
                                 format!("{:?}", classify(&addrs, &reference, &known))
                             }

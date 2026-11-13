@@ -186,7 +186,7 @@ impl App {
     /// not disappear after the key is accepted).
     fn update_banner(&self, ui: &mut egui::Ui) {
         let Some(rel) = &self.update else { return };
-        let label = format!("⬆  Доступна новая версия — {}", rel.display_version());
+        let label = format!("⬆ 发现新版本：{}", rel.display_version());
         let btn = egui::Button::new(egui::RichText::new(label).color(egui::Color32::BLACK))
             .fill(theme::WARN)
             .corner_radius(egui::CornerRadius::same(theme::RADIUS_SMALL))
@@ -372,7 +372,7 @@ pub fn run() -> Result<(), String> {
             Err(e @ eframe::Error::WinitEventLoop(_)) => {
                 renderer::forget();
                 return Err(format!(
-                    "нет доступа к графическому дисплею: {}",
+                    "无法访问图形显示设备：{}",
                     without_source_location(&e.to_string())
                 ));
             }
@@ -384,7 +384,7 @@ pub fn run() -> Result<(), String> {
     // says more about this start (a session with no desktop) than about the
     // machine, so the next start gets the whole chain again.
     renderer::forget();
-    Err(format!("не удалось открыть окно ({})", failures.join("; ")))
+    Err(format!("无法打开窗口（{}）", failures.join("; ")))
 }
 
 /// winit's `os error at <file>.rs:<line>: <what>` is for its own developers;
@@ -412,7 +412,10 @@ fn first_screen(settings: &Settings) -> Screen {
 }
 
 fn title() -> String {
-    format!("Antigravity Unlocker 2 v{}", update::current_version())
+    format!(
+        "Antigravity 解锁器 · 简体中文版 v{}",
+        update::current_version()
+    )
 }
 
 #[cfg(test)]

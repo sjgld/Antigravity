@@ -445,7 +445,7 @@ fn try_own_proxy(mut client: TcpStream, host: &str, port: u16) -> Result<(), Tcp
             // The route's name, never its address: this log goes into the report
             // users paste into a public chat, and the address carries their login
             // and their server. The window shows which proxy it is.
-            crate::dns_forwarder::log_proxy(&format!("свой прокси: {}", why));
+            crate::dns_forwarder::log_proxy(&format!("自定义代理：{}", why));
             upstream::OWN.health.note(false);
             return Err(client);
         }
@@ -455,7 +455,7 @@ fn try_own_proxy(mut client: TcpStream, host: &str, port: u16) -> Result<(), Tcp
         return Ok(());
     }
     routes::note_used(routes::Kind::Own);
-    crate::dns_forwarder::log_proxy(&format!("свой прокси -> {}", host));
+    crate::dns_forwarder::log_proxy(&format!("自定义代理 -> {}", host));
     splice(client, upstream_sock);
     Ok(())
 }
@@ -487,7 +487,7 @@ fn try_direct(mut client: TcpStream, host: &str, port: u16) -> Result<(), TcpStr
     let upstream = match connect_gate_direct(host, port, DIRECT_OPEN_BUDGET) {
         Ok(sock) => sock,
         Err(why) => {
-            crate::dns_forwarder::log_proxy(&format!("напрямую {}: {}", host, why));
+            crate::dns_forwarder::log_proxy(&format!("直连 {}：{}", host, why));
             return Err(client);
         }
     };
@@ -511,7 +511,7 @@ fn gate_direct_addrs(host: &str, port: u16) -> Result<(Vec<std::net::SocketAddr>
     let if_index = crate::net::pin_interface();
     let addrs = crate::dns_route::addresses(host);
     if addrs.is_empty() {
-        return Err("нет проверенных доступных DNS-прокси".into());
+        return Err("没有已验证可用的 DNS 代理".into());
     }
     let addrs = addrs
         .into_iter()
@@ -530,7 +530,7 @@ fn connect_gate_direct(host: &str, port: u16, budget: Duration) -> Result<TcpStr
 fn connect_bounded(host: &str, port: u16, budget: Duration) -> Result<TcpStream, String> {
     let addrs: Vec<_> = (host, port)
         .to_socket_addrs()
-        .map_err(|e| format!("имя не разрешается: {}", e))?
+        .map_err(|e| format!("域名解析失败：{}", e))?
         .collect();
     connect_addrs(addrs, budget, 0)
 }
@@ -544,7 +544,7 @@ fn connect_addrs(
 ) -> Result<TcpStream, String> {
     let deadline = Instant::now() + budget;
     if addrs.is_empty() {
-        return Err("имя не разрешается".to_string());
+        return Err("域名解析失败".to_string());
     }
     // IPv4 first. Every substituted address is IPv4 - the providers' proxies
     // are - while an AAAA answer for the same name is genuine Google, and on a
@@ -554,7 +554,7 @@ fn connect_addrs(
     // A slice per address, at least a second each, so three addresses get a
     // real attempt inside a four-second budget.
     let slice = (budget / addrs.len().max(1) as u32).max(Duration::from_secs(1));
-    let mut last = "время вышло".to_string();
+    let mut last = "超时".to_string();
     for addr in addrs {
         let left = deadline.saturating_duration_since(Instant::now());
         if left.is_zero() {
@@ -565,7 +565,7 @@ fn connect_addrs(
             Err(e) => last = e.to_string(),
         }
     }
-    Err(format!("не подключиться: {}", last))
+    Err(format!("无法连接：{}", last))
 }
 
 /// The user's own VPN as a route: genuine Google, through whatever the routing
@@ -584,7 +584,7 @@ fn try_vpn(mut client: TcpStream, host: &str, port: u16) -> Result<(), TcpStream
     let upstream = match connect_addrs(addrs, DIRECT_OPEN_BUDGET, 0) {
         Ok(sock) => sock,
         Err(why) => {
-            crate::dns_forwarder::log_proxy(&format!("через VPN {}: {}", host, why));
+            crate::dns_forwarder::log_proxy(&format!("通过 VPN 连接 {}：{}", host, why));
             return Err(client);
         }
     };
@@ -705,19 +705,26 @@ pub(crate) fn probe_dns_endpoint(host: &str, ip: Ipv4Addr, pin: u32) -> crate::d
     let probe = (|| {
         let mut sock = crate::net::connect((ip, 443).into(), Duration::from_secs(3), pin)
             .map_err(|e| e.to_string())?;
-        sock.set_read_timeout(Some(Duration::from_secs(3))).map_err(|e| e.to_string())?;
-        sock.set_write_timeout(Some(Duration::from_secs(3))).map_err(|e| e.to_string())?;
+        sock.set_read_timeout(Some(Duration::from_secs(3)))
+            .map_err(|e| e.to_string())?;
+        sock.set_write_timeout(Some(Duration::from_secs(3)))
+            .map_err(|e| e.to_string())?;
         let cutoff = sock.try_clone().map_err(|e| e.to_string())?;
         thread::scope(|scope| {
             let (tx, rx) = std::sync::mpsc::channel();
             scope.spawn(move || {
-                if matches!(rx.recv_timeout(Duration::from_secs(6)), Err(std::sync::mpsc::RecvTimeoutError::Timeout)) {
+                if matches!(
+                    rx.recv_timeout(Duration::from_secs(6)),
+                    Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+                ) {
                     let _ = cutoff.shutdown(std::net::Shutdown::Both);
                 }
             });
             let result = (|| {
-                let name = rustls::pki_types::ServerName::try_from(host.to_string()).map_err(|e| e.to_string())?;
-                let mut tls = ClientConnection::new(probe_config(), name).map_err(|e| e.to_string())?;
+                let name = rustls::pki_types::ServerName::try_from(host.to_string())
+                    .map_err(|e| e.to_string())?;
+                let mut tls =
+                    ClientConnection::new(probe_config(), name).map_err(|e| e.to_string())?;
                 let mut stream = rustls::Stream::new(&mut tls, &mut sock);
                 write!(stream, "POST /v1internal:loadCodeAssist HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: 2\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n{{}}")
                     .map_err(dns_probe_io_error)?;
@@ -735,8 +742,12 @@ pub(crate) fn probe_dns_endpoint(host: &str, ip: Ipv4Addr, pin: u32) -> crate::d
 fn dns_probe_io_error(error: io::Error) -> String {
     // A certificate's SANs can identify a private upstream. Log the validation
     // failure without copying those names into a report or a public log.
-    if matches!(error.get_ref().and_then(|e| e.downcast_ref::<rustls::Error>()),
-        Some(rustls::Error::InvalidCertificate(_))) {
+    if matches!(
+        error
+            .get_ref()
+            .and_then(|e| e.downcast_ref::<rustls::Error>()),
+        Some(rustls::Error::InvalidCertificate(_))
+    ) {
         "TLS certificate validation failed for the requested Google host".into()
     } else {
         error.to_string()
@@ -748,57 +759,92 @@ fn dns_probe_io_error(error: io::Error) -> String {
 fn read_dns_probe(reader: &mut impl Read) -> Result<Vec<u8>, String> {
     let mut raw = Vec::new();
     loop {
-        if raw.len() >= 16 * 1024 { return Err("DNS probe response is too large".into()); }
+        if raw.len() >= 16 * 1024 {
+            return Err("DNS probe response is too large".into());
+        }
         let mut buf = [0; 1024];
         let n = reader.read(&mut buf).map_err(dns_probe_io_error)?;
         raw.extend_from_slice(&buf[..n]);
         if let Some(end) = raw.windows(4).position(|w| w == b"\r\n\r\n") {
             let head = String::from_utf8_lossy(&raw[..end]).to_ascii_lowercase();
             let body = &raw[end + 4..];
-            if head.lines().any(|l| l.starts_with("transfer-encoding:") && l.contains("chunked")) {
+            if head
+                .lines()
+                .any(|l| l.starts_with("transfer-encoding:") && l.contains("chunked"))
+            {
                 if let Some(decoded) = dns_probe_chunks(body)? {
                     let mut response = raw[..end + 4].to_vec();
                     response.extend(decoded);
                     return Ok(response);
                 }
-            } else if let Some(length) = head.lines().find_map(|l| l.strip_prefix("content-length:")) {
-                let length: usize = length.trim().parse().map_err(|_| "invalid probe Content-Length")?;
-                if length > 16 * 1024 { return Err("DNS probe body is too large".into()); }
-                if body.len() >= length { return Ok(raw[..end + 4 + length].to_vec()); }
+            } else if let Some(length) =
+                head.lines().find_map(|l| l.strip_prefix("content-length:"))
+            {
+                let length: usize = length
+                    .trim()
+                    .parse()
+                    .map_err(|_| "invalid probe Content-Length")?;
+                if length > 16 * 1024 {
+                    return Err("DNS probe body is too large".into());
+                }
+                if body.len() >= length {
+                    return Ok(raw[..end + 4 + length].to_vec());
+                }
             } else if n == 0 {
                 return Ok(raw);
             }
         }
-        if n == 0 { return Err("truncated DNS probe response".into()); }
+        if n == 0 {
+            return Err("truncated DNS probe response".into());
+        }
     }
 }
 
 fn dns_probe_chunks(mut raw: &[u8]) -> Result<Option<Vec<u8>>, String> {
     let mut out = Vec::new();
     loop {
-        let Some(end) = raw.windows(2).position(|w| w == b"\r\n") else { return Ok(None); };
+        let Some(end) = raw.windows(2).position(|w| w == b"\r\n") else {
+            return Ok(None);
+        };
         let line = std::str::from_utf8(&raw[..end]).map_err(|_| "invalid probe chunk")?;
         let size = usize::from_str_radix(line.split(';').next().unwrap_or("").trim(), 16)
             .map_err(|_| "invalid probe chunk size")?;
         raw = &raw[end + 2..];
         if size == 0 {
-            return Ok((raw.starts_with(b"\r\n") || raw.windows(4).any(|w| w == b"\r\n\r\n")).then_some(out));
+            return Ok(
+                (raw.starts_with(b"\r\n") || raw.windows(4).any(|w| w == b"\r\n\r\n"))
+                    .then_some(out),
+            );
         }
-        let end = size.checked_add(2).filter(|n| *n <= 16 * 1024).ok_or("probe chunk too large")?;
-        if raw.len() < end { return Ok(None); }
-        if &raw[size..end] != b"\r\n" { return Err("invalid probe chunk boundary".into()); }
+        let end = size
+            .checked_add(2)
+            .filter(|n| *n <= 16 * 1024)
+            .ok_or("probe chunk too large")?;
+        if raw.len() < end {
+            return Ok(None);
+        }
+        if &raw[size..end] != b"\r\n" {
+            return Err("invalid probe chunk boundary".into());
+        }
         out.extend_from_slice(&raw[..size]);
         raw = &raw[end..];
     }
 }
 
-fn classify_dns_probe(response: &[u8], latency: Duration) -> Result<crate::dns_route::Probe, String> {
+fn classify_dns_probe(
+    response: &[u8],
+    latency: Duration,
+) -> Result<crate::dns_route::Probe, String> {
     let text = String::from_utf8_lossy(response).to_ascii_lowercase();
-    let status = text.lines().next().and_then(|line| {
-        let mut parts = line.split_whitespace();
-        parts.next().filter(|v| v.starts_with("http/"))?;
-        parts.next()?.parse::<u16>().ok()
-    }).ok_or("ответ не похож на HTTP")?;
+    let status = text
+        .lines()
+        .next()
+        .and_then(|line| {
+            let mut parts = line.split_whitespace();
+            parts.next().filter(|v| v.starts_with("http/"))?;
+            parts.next()?.parse::<u16>().ok()
+        })
+        .ok_or("响应不是有效的 HTTP 数据")?;
     if text.contains("user location is not supported") {
         return Ok(crate::dns_route::Probe::Refused);
     }
@@ -818,25 +864,36 @@ mod dns_probe_tests {
         impl Read for Reply {
             fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
                 let reply = b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 2\r\n\r\n{}";
-                if buf.len() < reply.len() { panic!("fixture buffer too small"); }
+                if buf.len() < reply.len() {
+                    panic!("fixture buffer too small");
+                }
                 buf[..reply.len()].copy_from_slice(reply);
                 Ok(reply.len())
             }
         }
         let response = read_dns_probe(&mut Reply).unwrap();
-        assert!(matches!(classify_dns_probe(&response, Duration::ZERO), Ok(crate::dns_route::Probe::Reachable(_))));
+        assert!(matches!(
+            classify_dns_probe(&response, Duration::ZERO),
+            Ok(crate::dns_route::Probe::Reachable(_))
+        ));
     }
 
     #[test]
     fn a_chunked_region_refusal_is_not_a_reachable_proxy() {
         let raw = b"HTTP/1.1 400 Bad Request\r\nTransfer-Encoding: chunked\r\n\r\nc\r\nUser locatio\r\n12\r\nn is not supported\r\n0\r\n\r\n";
         let response = read_dns_probe(&mut &raw[..]).unwrap();
-        assert!(matches!(classify_dns_probe(&response, Duration::ZERO), Ok(crate::dns_route::Probe::Refused)));
+        assert!(matches!(
+            classify_dns_probe(&response, Duration::ZERO),
+            Ok(crate::dns_route::Probe::Refused)
+        ));
     }
 
     #[test]
     fn truncated_or_failing_http_is_not_accepted() {
-        assert!(read_dns_probe(&mut &b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 8\r\n\r\n{}"[..]).is_err());
+        assert!(read_dns_probe(
+            &mut &b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 8\r\n\r\n{}"[..]
+        )
+        .is_err());
         assert!(read_dns_probe(&mut &b"HTTP/1.1 400 Bad Request\r\nTransfer-Encoding: chunked\r\n\r\nffffffffff\r\n"[..]).is_err());
         assert!(classify_dns_probe(b"HTTP/1.1 503 Unavailable\r\n\r\n", Duration::ZERO).is_err());
     }
@@ -860,7 +917,7 @@ pub fn probe_vpn() {
         Ok(()) => routes::record(routes::Kind::Vpn, started.elapsed()),
         Err(why) => {
             routes::probe_failed(routes::Kind::Vpn);
-            crate::dns_forwarder::log_proxy(&format!("через VPN не отвечает: {}", why));
+            crate::dns_forwarder::log_proxy(&format!("通过 VPN 连接无响应：{}", why));
         }
     }
 }
@@ -880,15 +937,15 @@ fn probe_request(mut sock: TcpStream) -> Result<(), String> {
     );
     stream
         .write_all(req.as_bytes())
-        .map_err(|e| format!("рукопожатие: {}", e))?;
+        .map_err(|e| format!("握手失败：{}", e))?;
     let mut buf = [0u8; 64];
     let n = stream
         .read(&mut buf)
-        .map_err(|e| format!("ответа нет: {}", e))?;
+        .map_err(|e| format!("未收到响应：{}", e))?;
     if n > 0 && buf.starts_with(b"HTTP/") {
         Ok(())
     } else {
-        Err("ответ не похож на HTTP".to_string())
+        Err("响应不是有效的 HTTP 数据".to_string())
     }
 }
 
@@ -1113,7 +1170,7 @@ fn handshake(
 ) -> Result<(), String> {
     let left = deadline.saturating_duration_since(Instant::now());
     if left.is_zero() {
-        return Err("таймаут".to_string());
+        return Err("超时".to_string());
     }
     sock.set_nonblocking(false).ok();
     // The socket timeouts come from the caller's deadline, not from a constant of
@@ -1125,14 +1182,14 @@ fn handshake(
     sock.set_write_timeout(Some(left)).ok();
     while conn.is_handshaking() {
         if Instant::now() >= deadline {
-            return Err("таймаут".to_string());
+            return Err("超时".to_string());
         }
         if conn.wants_write() {
             conn.write_tls(sock).map_err(|e| e.to_string())?;
         }
         if conn.wants_read() {
             match conn.read_tls(sock) {
-                Ok(0) => return Err("апстрим закрыл соединение".to_string()),
+                Ok(0) => return Err("上游关闭了连接".to_string()),
                 Ok(_) => conn.process_new_packets().map_err(|e| e.to_string())?,
                 Err(e) => return Err(e.to_string()),
             };
@@ -1327,7 +1384,7 @@ fn bind_from(first: u16, fallbacks: &[u16]) -> Result<TcpListener, crate::gate::
             Ok(listener) => {
                 if attempt > 0 {
                     crate::dns_forwarder::log_proxy(&format!(
-                        "порт {} освободился с {}-й попытки",
+                        "端口 {} 在第 {} 次尝试后可用",
                         first,
                         attempt + 1
                     ));
@@ -1365,7 +1422,7 @@ fn bind_from(first: u16, fallbacks: &[u16]) -> Result<TcpListener, crate::gate::
         for other in fallbacks.iter().copied().filter(|p| *p != first) {
             if let Ok(listener) = TcpListener::bind(addr_at(other)) {
                 crate::dns_forwarder::log_proxy(&format!(
-                    "порт {} недоступен ({}) — локальный прокси перенесён на {}",
+                    "端口 {} 不可用（{}），本地代理已改用端口 {}",
                     first, err, other
                 ));
                 adopt(other);
@@ -1389,10 +1446,7 @@ pub fn run(if_index: u32) -> Result<(), String> {
         match bind_listener() {
             Ok(listener) => {
                 if said.is_some() {
-                    crate::dns_forwarder::log_proxy(&format!(
-                        "локальный прокси поднялся на порту {}",
-                        port()
-                    ));
+                    crate::dns_forwarder::log_proxy(&format!("本地代理已在端口 {} 启动", port()));
                     crate::gate::set_blocker("proxy", None);
                 }
                 break listener;
@@ -1401,16 +1455,16 @@ pub fn run(if_index: u32) -> Result<(), String> {
                 // Logged when the reason changes, not every minute.
                 if said.as_ref() != Some(&blocker) {
                     crate::dns_forwarder::log_proxy(&format!(
-                        "not started: не занять {} — {} ({})",
+                        "未启动：无法监听 {}：{}（{}）",
                         blocker.addr,
                         blocker.error,
                         match blocker.cause.as_str() {
                             "held" if !blocker.by.is_empty() =>
-                                format!("порт занят программой {}", blocker.by),
-                            "held" => "порт занят другой программой".to_string(),
-                            "reserved" => "порт зарезервирован Windows".to_string(),
-                            "denied" => "доступ запрещён — антивирус или файрвол".to_string(),
-                            _ => "причина не определена".to_string(),
+                                format!("端口被程序 {} 占用", blocker.by),
+                            "held" => "端口被其他程序占用".to_string(),
+                            "reserved" => "端口被 Windows 保留".to_string(),
+                            "denied" => "访问被拒绝，可能是安全软件或防火墙限制".to_string(),
+                            _ => "原因尚未确定".to_string(),
                         }
                     ));
                     said = Some(blocker.clone());

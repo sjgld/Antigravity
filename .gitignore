@@ -1,0 +1,8 @@
+/target/
+/.relay_key
+/.group
+/.exits
+/src/relay.rs
+/src/exits.rs
+*.part
+__pycache__/

@@ -747,7 +747,7 @@ mod tests {
     fn the_relays_record_counts_as_changed_only_where_it_shows() {
         let base = Report {
             at: 1_000,
-            route: "напрямую".into(),
+            route: "直连".into(),
             ..Report::default()
         };
         let later = Report {
@@ -756,7 +756,7 @@ mod tests {
         };
         assert!(base.same_state_as(&later));
         let rerouted = Report {
-            route: "релей".into(),
+            route: "转发".into(),
             ..base.clone()
         };
         assert!(!base.same_state_as(&rerouted));
@@ -764,7 +764,7 @@ mod tests {
             last_400: Some(Episode {
                 at: 1_010,
                 count: 1,
-                acted: "маршрут отложен".into(),
+                acted: "线路已暂缓使用".into(),
                 ..Episode::default()
             }),
             ..base.clone()

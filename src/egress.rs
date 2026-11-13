@@ -535,16 +535,12 @@ mod tests {
         let reading = read();
         let (stand_down, _) = vpn_verdict(eg.as_ref());
         println!(
-            "vpn_active: {}\nclient:     {:?}\nслужба:     {:?}\nstand down: {}  (правила DNS {})",
+            "VPN 已启用：{}\n客户端：{:?}\n后台服务：{:?}\n暂停接管：{}（DNS 规则：{}）",
             eg.as_ref().is_some_and(|e| e.vpn_active),
             reading.client,
             reading.relay,
             stand_down,
-            if stand_down {
-                "НЕ ставятся"
-            } else {
-                "ставятся"
-            }
+            if stand_down { "不安装" } else { "安装" }
         );
     }
 

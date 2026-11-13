@@ -112,7 +112,7 @@ pub fn resign(path: &Path) -> Result<(), String> {
             "codesign: {}",
             String::from_utf8_lossy(&o.stderr).trim()
         )),
-        Err(e) => Err(format!("codesign не запустился: {e}")),
+        Err(e) => Err(format!("codesign 启动失败：{e}")),
     }
 }
 
@@ -136,10 +136,7 @@ pub fn app_management_hint(path: &Path, err: &str) -> String {
         && (err.contains("Operation not permitted") || err.contains("os error 1)"))
     {
         format!(
-            "{err}. macOS не дал изменить приложение: Системные настройки → \
-             Конфиденциальность и безопасность → Управление приложениями → \
-             включите Терминал (или программу, из которой запущен разблокировщик), \
-             затем повторите"
+            "{err}。macOS 拒绝修改应用程序。请打开“系统设置 → 隐私与安全性 → App 管理”，允许“终端”或用于启动解锁器的程序，然后重试。"
         )
     } else {
         err.to_string()
@@ -242,11 +239,11 @@ pub fn agent_is_running(label: &str) -> bool {
 pub fn agent_install(label: &str, plist: &str) -> Result<bool, String> {
     let path = agent_plist_path(label);
     if let Some(dir) = path.parent() {
-        fs::create_dir_all(dir).map_err(|e| format!("не создать {}: {e}", dir.display()))?;
+        fs::create_dir_all(dir).map_err(|e| format!("无法创建 {}：{e}", dir.display()))?;
     }
     let changed = fs::read_to_string(&path).map_or(true, |old| old != plist);
     if changed {
-        fs::write(&path, plist).map_err(|e| format!("не записать {}: {e}", path.display()))?;
+        fs::write(&path, plist).map_err(|e| format!("无法写入 {}：{e}", path.display()))?;
     }
     let loaded = agent_is_loaded(label);
     if changed && loaded {
@@ -258,7 +255,7 @@ pub fn agent_install(label: &str, plist: &str) -> Result<bool, String> {
             // Older launchctl, or a session where bootstrap is refused.
             || launchctl(&["load", "-w", &p]).is_some_and(|o| o.status.success());
         if !ok && !agent_is_loaded(label) {
-            return Err(format!("launchd не загрузил {label}"));
+            return Err(format!("launchd 未能加载 {label}"));
         }
     }
     Ok(changed)
@@ -330,7 +327,7 @@ pub fn persist_env(name: &str, value: &str) -> Result<bool, String> {
     let changed = agent_install(ENV_LABEL, &plist)?;
     let live = getenv(name).as_deref() == Some(value);
     if !live && !setenv(name, value) {
-        return Err(format!("launchctl setenv {name} не удался"));
+        return Err(format!("launchctl setenv {name} 失败"));
     }
     Ok(changed || !live)
 }

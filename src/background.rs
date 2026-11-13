@@ -157,11 +157,11 @@ mod windows_impl {
     /// what makes autostart survive the user moving or deleting the download; it is
     /// removed again by `disable`.
     pub fn enable() -> Result<(), String> {
-        let src = env::current_exe().map_err(|e| format!("не найден путь к exe: {}", e))?;
+        let src = env::current_exe().map_err(|e| format!("无法确定程序路径：{}", e))?;
         let dir = install_dir();
         let dst = installed_exe();
 
-        fs::create_dir_all(&dir).map_err(|e| format!("не создать {}: {}", dir.display(), e))?;
+        fs::create_dir_all(&dir).map_err(|e| format!("无法创建 {}：{}", dir.display(), e))?;
         // The file cannot be replaced while the previous relay holds it open.
         stop_process();
         if src != dst {
@@ -183,7 +183,7 @@ mod windows_impl {
                   -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew \
                   -ExecutionTimeLimit ([TimeSpan]::Zero) \
                   -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1); \
-             $d='Antigravity Unlocker: локальный DNS-релей'; \
+             $d='Antigravity Unlocker: 本地 DNS 转发服务'; \
              try {{ \
                $p=New-ScheduledTaskPrincipal -UserId \"$env:USERDOMAIN\\$env:USERNAME\" \
                     -LogonType S4U -RunLevel Limited; \
@@ -198,11 +198,11 @@ mod windows_impl {
             task = TASK_NAME
         );
 
-        let out = powershell(&cmd).ok_or_else(|| "не удалось запустить PowerShell".to_string())?;
+        let out = powershell(&cmd).ok_or_else(|| "无法启动 PowerShell".to_string())?;
         if !out.status.success() {
             let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
             return Err(if stderr.is_empty() {
-                "не удалось зарегистрировать задачу".to_string()
+                "计划任务注册失败".to_string()
             } else {
                 stderr
             });
@@ -243,7 +243,7 @@ mod windows_impl {
                       -ExecutionTimeLimit ([TimeSpan]::Zero) \
                       -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1); \
                  Register-ScheduledTask -TaskName '{task}' -Action $a -Trigger $t \
-                      -Settings $s -Description 'Antigravity Unlocker: локальный DNS-релей' \
+                      -Settings $s -Description 'Antigravity Unlocker: 本地 DNS 转发服务' \
                       -Force -ErrorAction Stop | Out-Null; \
                  Start-ScheduledTask -TaskName '{task}'",
                 exe = dst.display(),
@@ -258,10 +258,10 @@ mod windows_impl {
             }
         }
         Err(match last {
-            Some(code) => format!(
-                "задача создана, но релей не запустился (код задачи 0x{code}; подробности в forwarder.log)"
-            ),
-            None => "задача создана, но релей не запустился".to_string(),
+            Some(code) => {
+                format!("计划任务已创建，但转发服务未启动（任务代码 0x{code}，详见 forwarder.log）")
+            }
+            None => "计划任务已创建，但转发服务未启动".to_string(),
         })
     }
 
@@ -315,7 +315,7 @@ mod windows_impl {
                 }
             }
         }
-        Err(format!("не скопировать exe: {}", last))
+        Err(format!("无法复制程序文件：{}", last))
     }
 
     const COPY_TRIES: usize = 6;
@@ -367,7 +367,9 @@ mod windows_impl {
             if let Err(e) = enable_watchdog() {
                 // DNS is already running. A launch-filter conflict must not
                 // report a failed DNS start or prevent its rules being applied.
-                crate::watchdog::log(&format!("DNS helper upgraded; Desktop launch guard unavailable: {e}"));
+                crate::watchdog::log(&format!(
+                    "DNS helper upgraded; Desktop launch guard unavailable: {e}"
+                ));
             }
         }
         Ok(())
@@ -394,9 +396,9 @@ mod windows_impl {
         if installed_copy_is_current() {
             return Ok(());
         }
-        let src = env::current_exe().map_err(|e| format!("не найден путь к exe: {}", e))?;
+        let src = env::current_exe().map_err(|e| format!("无法确定程序路径：{}", e))?;
         let dir = install_dir();
-        fs::create_dir_all(&dir).map_err(|e| format!("не создать {}: {}", dir.display(), e))?;
+        fs::create_dir_all(&dir).map_err(|e| format!("无法创建 {}：{}", dir.display(), e))?;
         // An older watchdog may be running the copy about to be replaced.
         disable_watchdog();
         stop_process();
@@ -419,7 +421,7 @@ mod windows_impl {
     pub fn enable_watchdog() -> Result<(), String> {
         let exe = installed_exe();
         if !exe.exists() {
-            return Err("exe не установлен в %ProgramData%".to_string());
+            return Err("程序尚未安装到 %ProgramData%".to_string());
         }
         let _ = crate::launch_guard::uninstall();
         let cmd = format!(
@@ -430,7 +432,7 @@ mod windows_impl {
                   -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew \
                   -ExecutionTimeLimit ([TimeSpan]::Zero) \
                   -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1); \
-             $d='Antigravity Unlocker: сторож патча'; \
+             $d='Antigravity Unlocker: 自动补丁守护服务'; \
              try {{ \
                $p=New-ScheduledTaskPrincipal -UserId \"$env:USERDOMAIN\\$env:USERNAME\" \
                     -LogonType S4U -RunLevel Limited; \
@@ -444,7 +446,7 @@ mod windows_impl {
             flag = WATCHDOG_FLAG,
             task = WATCHDOG_TASK_NAME
         );
-        let out = powershell(&cmd).ok_or_else(|| "не удалось запустить PowerShell".to_string())?;
+        let out = powershell(&cmd).ok_or_else(|| "无法启动 PowerShell".to_string())?;
         if out.status.success() {
             Ok(())
         } else {
@@ -693,7 +695,7 @@ mod unix_impl {
 
         let up = unit_path();
         if let Some(p) = up.parent() {
-            fs::create_dir_all(p).map_err(|e| format!("не создать {}: {}", p.display(), e))?;
+            fs::create_dir_all(p).map_err(|e| format!("无法创建 {}：{}", p.display(), e))?;
         }
         // The window finds the service's `gate.json` through `log_dir()`, which
         // follows `XDG_DATA_HOME`. The systemd user manager does not always carry
@@ -704,19 +706,16 @@ mod unix_impl {
         // A unit from an older build lacks the data-dir line; running on under
         // it keeps the service writing where the window does not look.
         let unit_changed = fs::read_to_string(&up).map_or(true, |old| old != unit);
-        fs::write(&up, unit).map_err(|e| format!("не записать юнит: {}", e))?;
+        fs::write(&up, unit).map_err(|e| format!("无法写入服务单元：{}", e))?;
 
         systemctl(&["daemon-reload"]);
         if !systemctl(&["enable", "--now", UNIT_NAME]) {
-            return Err("не удалось запустить systemd-юнит (systemctl --user)".to_string());
+            return Err("无法启动 systemd 用户服务（systemctl --user）".to_string());
         }
         // `enable --now` leaves a unit that is already running alone, so a copy
         // just replaced would sit unused until the next login.
         if (replaced || unit_changed) && !systemctl(&["restart", UNIT_NAME]) {
-            return Err(
-                "новая версия прокси записана, но служба не перезапустилась (systemctl --user)"
-                    .to_string(),
-            );
+            return Err("已更新代理程序，但服务未能重启（systemctl --user）".to_string());
         }
         // The watcher runs the same copy: left on the old inode it would keep
         // the previous version's patch routines until the next login.
@@ -754,10 +753,10 @@ mod unix_impl {
     /// Puts this exe where the units run it from. True when the copy on disk
     /// changed (a unit already running it then has to be restarted).
     fn install_copy() -> Result<bool, String> {
-        let src = std::env::current_exe().map_err(|e| format!("нет пути к exe: {}", e))?;
+        let src = std::env::current_exe().map_err(|e| format!("无法确定程序路径：{}", e))?;
         let dir = install_dir();
         let exe = installed_exe();
-        fs::create_dir_all(&dir).map_err(|e| format!("не создать {}: {}", dir.display(), e))?;
+        fs::create_dir_all(&dir).map_err(|e| format!("无法创建 {}：{}", dir.display(), e))?;
         // Copy self so the unit survives the download folder being moved/removed.
         //
         // Never *over* the installed copy: Linux will not open a file a process
@@ -772,7 +771,7 @@ mod unix_impl {
         if replaced {
             use std::os::unix::fs::PermissionsExt;
             let fresh = dir.join(".ag_proxy.new");
-            fs::copy(&src, &fresh).map_err(|e| format!("копия exe: {}", e))?;
+            fs::copy(&src, &fresh).map_err(|e| format!("复制程序文件：{}", e))?;
             let _ = fs::set_permissions(&fresh, fs::Permissions::from_mode(0o755));
             // A copy of a browser download keeps its quarantine flag, and
             // launchd would then be refused the binary by Gatekeeper.
@@ -780,7 +779,7 @@ mod unix_impl {
             crate::macos::strip_quarantine(&fresh);
             fs::rename(&fresh, &exe).map_err(|e| {
                 let _ = fs::remove_file(&fresh);
-                format!("замена exe: {}", e)
+                format!("替换程序文件：{}", e)
             })?;
         }
         Ok(replaced)
@@ -814,19 +813,17 @@ mod unix_impl {
         let replaced = install_copy()?;
         let up = watchdog_unit_path();
         if let Some(p) = up.parent() {
-            fs::create_dir_all(p).map_err(|e| format!("не создать {}: {}", p.display(), e))?;
+            fs::create_dir_all(p).map_err(|e| format!("无法创建 {}：{}", p.display(), e))?;
         }
         let unit = unit_text("Antigravity Unlocker auto-patch", WATCHDOG_FLAG);
         let unit_changed = fs::read_to_string(&up).map_or(true, |old| old != unit);
-        fs::write(&up, unit).map_err(|e| format!("не записать юнит: {}", e))?;
+        fs::write(&up, unit).map_err(|e| format!("无法写入服务单元：{}", e))?;
         systemctl(&["daemon-reload"]);
         if !systemctl(&["enable", "--now", WATCHDOG_UNIT_NAME]) {
-            return Err("не удалось запустить systemd-юнит (systemctl --user)".to_string());
+            return Err("无法启动 systemd 用户服务（systemctl --user）".to_string());
         }
         if (replaced || unit_changed) && !systemctl(&["restart", WATCHDOG_UNIT_NAME]) {
-            return Err(
-                "автопатч записан, но служба не перезапустилась (systemctl --user)".to_string(),
-            );
+            return Err("自动补丁配置已写入，但服务未能重启（systemctl --user）".to_string());
         }
         Ok(())
     }
@@ -910,10 +907,7 @@ mod unix_impl {
         let changed =
             crate::macos::agent_install(PROXY_LABEL, &agent_text(PROXY_LABEL, PROXY_FLAG))?;
         if replaced && !changed && !crate::macos::agent_restart(PROXY_LABEL) {
-            return Err(
-                "новая версия прокси записана, но служба не перезапустилась (launchctl)"
-                    .to_string(),
-            );
+            return Err("已更新代理程序，但服务未能重启（launchctl）".to_string());
         }
         if replaced && is_watchdog_enabled() {
             crate::macos::agent_restart(WATCHDOG_LABEL);
@@ -936,7 +930,7 @@ mod unix_impl {
             &agent_text(WATCHDOG_LABEL, WATCHDOG_FLAG),
         )?;
         if replaced && !changed && !crate::macos::agent_restart(WATCHDOG_LABEL) {
-            return Err("автопатч записан, но служба не перезапустилась (launchctl)".to_string());
+            return Err("自动补丁配置已写入，但服务未能重启（launchctl）".to_string());
         }
         Ok(())
     }

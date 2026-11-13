@@ -120,7 +120,7 @@ impl Route {
         // their server, and for a built-in exit it is usually the exit itself -
         // neither belongs in a log that is pasted into a public chat.
         crate::dns_forwarder::log_proxy(&format!(
-            "{} выходит в {} — это заблокированный регион, маршрут отключён до смены выхода",
+            "{} 的出口为 {}，属于受限地区，出口变更前暂不使用此线路",
             self.label, loc
         ));
     }
@@ -134,10 +134,7 @@ impl Route {
             return;
         }
         *pinned = None;
-        crate::dns_forwarder::log_proxy(&format!(
-            "{} теперь выходит в {} — снова используем",
-            self.label, loc
-        ));
+        crate::dns_forwarder::log_proxy(&format!("{} 的出口已变为 {}，恢复使用", self.label, loc));
     }
 
     /// The warm loop's whole check for one route, run on our own time and never
@@ -184,11 +181,14 @@ impl Route {
         match probe_fn() {
             Ok(()) => {
                 crate::routes::record(self.kind, started.elapsed());
-                self.health.revive("проверка прошла");
+                self.health.revive("检查通过");
             }
             Err(why) => {
-                crate::dns_forwarder::log_proxy(&format!("{} не отвечает: {}", self.label, why));
-                if self.kind != crate::routes::Kind::Exits && crate::routes::is_streaming(self.kind) { return; }
+                crate::dns_forwarder::log_proxy(&format!("{} 无响应：{}", self.label, why));
+                if self.kind != crate::routes::Kind::Exits && crate::routes::is_streaming(self.kind)
+                {
+                    return;
+                }
                 if self.kind != crate::routes::Kind::Exits {
                     crate::routes::probe_failed(self.kind);
                 }
@@ -199,7 +199,7 @@ impl Route {
 }
 
 /// The user's own proxy, as a route. Built-in exits carry one of these each.
-pub static OWN: Route = Route::new("свой прокси", crate::routes::Kind::Own);
+pub static OWN: Route = Route::new("自定义代理", crate::routes::Kind::Own);
 
 /// A user-supplied HTTP CONNECT proxy.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -241,20 +241,20 @@ impl Upstream {
 pub fn parse(input: &str) -> Result<Upstream, String> {
     let raw = input.trim();
     if raw.is_empty() {
-        return Err("пустая строка".to_string());
+        return Err("内容为空".to_string());
     }
     let rest = raw
         .strip_prefix("http://")
         .or_else(|| raw.strip_prefix("https://"))
         .unwrap_or(raw);
     if rest.contains("://") {
-        return Err("поддерживается только HTTP-прокси (http://…)".to_string());
+        return Err("仅支持 HTTP 代理（http://…）".to_string());
     }
     // Split on the LAST '@': a password may contain one, a hostname may not.
     let (auth, hostport) = match rest.rsplit_once('@') {
         Some((a, hp)) => {
             if !a.contains(':') {
-                return Err("логин без пароля — нужно логин:пароль@хост:порт".to_string());
+                return Err("用户名后缺少密码，请使用 用户名:密码@主机:端口".to_string());
             }
             (Some(a.to_string()), hp)
         }
@@ -263,16 +263,16 @@ pub fn parse(input: &str) -> Result<Upstream, String> {
     let hostport = hostport.trim_end_matches('/');
     let (host, port) = hostport
         .rsplit_once(':')
-        .ok_or_else(|| "не указан порт — нужно хост:порт".to_string())?;
+        .ok_or_else(|| "缺少端口，请使用 主机:端口".to_string())?;
     let host = host.trim_start_matches('[').trim_end_matches(']');
     if host.is_empty() {
-        return Err("не указан адрес".to_string());
+        return Err("未指定地址".to_string());
     }
     let port: u16 = port
         .parse()
-        .map_err(|_| format!("порт «{}» не число", port))?;
+        .map_err(|_| format!("端口“{}”不是数字", port))?;
     if port == 0 {
-        return Err("порт не может быть 0".to_string());
+        return Err("端口不能为 0".to_string());
     }
     Ok(Upstream {
         host: host.to_string(),
@@ -355,12 +355,12 @@ fn basic(auth: &str) -> String {
 fn connect_within_budget(host: &str, port: u16, deadline: Instant) -> Result<TcpStream, String> {
     let addrs: Vec<_> = (host, port)
         .to_socket_addrs()
-        .map_err(|e| format!("адрес не разрешается: {}", e))?
+        .map_err(|e| format!("地址解析失败：{}", e))?
         .collect();
     if addrs.is_empty() {
-        return Err("адрес не разрешается".to_string());
+        return Err("地址解析失败".to_string());
     }
-    let mut last = String::from("время вышло");
+    let mut last = String::from("超时");
     for addr in addrs {
         let left = deadline.saturating_duration_since(Instant::now());
         if left.is_zero() {
@@ -371,7 +371,7 @@ fn connect_within_budget(host: &str, port: u16, deadline: Instant) -> Result<Tcp
             Err(e) => last = e.to_string(),
         }
     }
-    Err(format!("недоступен: {}", last))
+    Err(format!("不可用：{}", last))
 }
 
 /// Opens a tunnel to `host:port` through the given proxy.
@@ -394,7 +394,7 @@ pub fn open(up: &Upstream, host: &str, port: u16, budget: Duration) -> Result<Tc
     // A zero timeout means "block forever" to the OS, so a spent budget has to be
     // an error here rather than a socket option.
     if left().is_zero() {
-        return Err("прокси не ответил вовремя".to_string());
+        return Err("代理响应超时".to_string());
     }
     sock.set_read_timeout(Some(left())).ok();
     sock.set_write_timeout(Some(left())).ok();
@@ -414,21 +414,21 @@ pub fn open(up: &Upstream, host: &str, port: u16, budget: Duration) -> Result<Tc
     }
     req.push_str("\r\n");
     sock.write_all(req.as_bytes())
-        .map_err(|e| format!("не отправить CONNECT: {}", e))?;
+        .map_err(|e| format!("CONNECT 请求发送失败：{}", e))?;
 
     let mut head = Vec::new();
     let mut byte = [0u8; 1];
     while !head.ends_with(b"\r\n\r\n") {
         if head.len() > 8 * 1024 {
-            return Err("прокси ответил чем-то очень длинным".to_string());
+            return Err("代理响应过长".to_string());
         }
         // The socket timeout bounds one `read`; this bounds the loop, so a proxy
         // dribbling a byte at a time cannot outlast the budget by repeating.
         if left().is_zero() {
-            return Err("прокси не ответил вовремя".to_string());
+            return Err("代理响应超时".to_string());
         }
         match sock.read(&mut byte) {
-            Ok(0) => return Err("прокси закрыл соединение".to_string()),
+            Ok(0) => return Err("代理关闭了连接".to_string()),
             Ok(_) => head.push(byte[0]),
             // The read timeout expiring: `TimedOut` on Windows, `WouldBlock` on
             // Linux, where it reads «Resource temporarily unavailable (os error
@@ -440,9 +440,9 @@ pub fn open(up: &Upstream, host: &str, port: u16, budget: Duration) -> Result<Tc
                     std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
                 ) =>
             {
-                return Err("соединение принято, но на запрос прокси не ответил вовремя".to_string())
+                return Err("连接已建立，但代理响应请求超时".to_string())
             }
-            Err(e) => return Err(format!("нет ответа: {}", e)),
+            Err(e) => return Err(format!("无响应：{}", e)),
         }
     }
     let status = String::from_utf8_lossy(&head)
@@ -458,12 +458,12 @@ pub fn open(up: &Upstream, host: &str, port: u16, budget: Duration) -> Result<Tc
         // problem, and 403 means this proxy filters by destination and does not
         // carry the host we asked for.
         if status.contains(" 407") {
-            return Err("прокси требует логин и пароль".to_string());
+            return Err("代理需要用户名和密码".to_string());
         }
         if status.contains(" 403") {
-            return Err(format!("прокси не пропускает этот хост: {}", host));
+            return Err(format!("代理不允许访问此主机：{}", host));
         }
-        return Err(format!("прокси отказал: {}", status));
+        return Err(format!("代理拒绝请求：{}", status));
     }
     // The budgets above bounded reaching the proxy and reading its answer. They
     // are mine, not the caller's, so the socket goes back clean - a caller that
@@ -497,17 +497,17 @@ pub fn probe(up: &Upstream) -> Result<(), String> {
     );
     stream
         .write_all(req.as_bytes())
-        .map_err(|e| format!("рукопожатие: {}", e))?;
+        .map_err(|e| format!("握手失败：{}", e))?;
     let mut buf = [0u8; 64];
     let n = stream
         .read(&mut buf)
-        .map_err(|e| format!("ответа нет: {}", e))?;
+        .map_err(|e| format!("未收到响应：{}", e))?;
     // Any status line means the tunnel carried a request end to end; which status
     // it is says nothing, since the path is deliberately not a real API call.
     if n > 0 && buf.starts_with(b"HTTP/") {
         Ok(())
     } else {
-        Err("ответ не похож на HTTP".to_string())
+        Err("响应不是有效的 HTTP 数据".to_string())
     }
 }
 
@@ -747,7 +747,7 @@ mod tests {
     /// one per route: two of these could now run in parallel without fighting.
     #[test]
     fn a_blocked_exit_stands_the_route_down_until_the_address_changes() {
-        let r = Route::new("тест", crate::routes::Kind::Own);
+        let r = Route::new("测试", crate::routes::Kind::Own);
 
         r.note_blocked_exit("203.0.113.7", "RU");
         assert_eq!(r.bad_exit().as_deref(), Some("203.0.113.7"));
@@ -775,8 +775,8 @@ mod tests {
     /// dead built-in exit would have benched the user's own proxy too.
     #[test]
     fn routes_stand_down_independently() {
-        let a = Route::new("тест A", crate::routes::Kind::Own);
-        let b = Route::new("тест B", crate::routes::Kind::Own);
+        let a = Route::new("测试 A", crate::routes::Kind::Own);
+        let b = Route::new("测试 B", crate::routes::Kind::Own);
         a.note_blocked_exit("203.0.113.7", "RU");
         a.health.note(false);
         a.health.note(false);

@@ -71,13 +71,13 @@ impl Cap {
 
     pub fn title(self) -> &'static str {
         match self {
-            Cap::ClientPatch => "Разблокировать вход в аккаунт",
-            Cap::Watchdog => "Автопатч Antigravity",
-            Cap::Dns => "Обход через DNS",
-            Cap::LocalProxy => "Локальный прокси",
-            Cap::OwnProxy => "Свой HTTP-прокси",
-            Cap::GroupProxy => "Прокси из группы",
-            Cap::DnsRotation => "Ротация DNS-серверов",
+            Cap::ClientPatch => "解除账号登录限制",
+            Cap::Watchdog => "Antigravity 自动补丁",
+            Cap::Dns => "DNS 解锁",
+            Cap::LocalProxy => "本地代理",
+            Cap::OwnProxy => "自定义 HTTP 代理",
+            Cap::GroupProxy => "群组代理",
+            Cap::DnsRotation => "DNS 服务器轮换",
         }
     }
 }
@@ -255,18 +255,9 @@ impl Status {
 pub fn bypass_order(on: bool) -> Vec<Cap> {
     if on {
         // The user's own proxy is theirs to switch on: it needs an address.
-        vec![
-            Cap::Dns,
-            Cap::LocalProxy,
-            Cap::GroupProxy,
-        ]
+        vec![Cap::Dns, Cap::LocalProxy, Cap::GroupProxy]
     } else {
-        vec![
-            Cap::LocalProxy,
-            Cap::OwnProxy,
-            Cap::GroupProxy,
-            Cap::Dns,
-        ]
+        vec![Cap::LocalProxy, Cap::OwnProxy, Cap::GroupProxy, Cap::Dns]
     }
 }
 
@@ -543,7 +534,7 @@ fn run_worker(
                 push_status(&mut ctx, Scan::Settings);
             }
             Cmd::DeepRefresh => {
-                ctx.busy(Some("Проверка установок"));
+                ctx.busy(Some("正在检查安装"));
                 push_status(&mut ctx, Scan::Deep);
                 ctx.busy(None);
             }
@@ -566,10 +557,13 @@ fn run_worker(
                     ctx.settings.save();
                 }
                 #[cfg(windows)]
-                if is_admin() && ctx.settings.auto_patch_wanted() && background::is_watchdog_enabled() {
+                if is_admin()
+                    && ctx.settings.auto_patch_wanted()
+                    && background::is_watchdog_enabled()
+                {
                     let _ = crate::launch_guard::uninstall();
                 }
-                ctx.busy(Some("Проверка установок"));
+                ctx.busy(Some("正在检查安装"));
                 push_status(&mut ctx, Scan::Deep);
                 // The path the user just pointed at is an install found at last.
                 if auto_patch_found(&mut ctx) {
@@ -578,10 +572,13 @@ fn run_worker(
                 ctx.busy(None);
             }
             Cmd::PatchInstall(p) => {
-                ctx.busy(Some("Патч"));
+                ctx.busy(Some("正在应用补丁"));
                 let label = crate::install_label(&p);
                 if !patch_found(&mut ctx, vec![(label, p)]) {
-                    ctx.log(Level::Warn, format!("{}: патч не записан, см. выше", label));
+                    ctx.log(
+                        Level::Warn,
+                        format!("{}：补丁写入失败，请查看上方日志", label),
+                    );
                 }
                 push_status(&mut ctx, Scan::Deep);
                 ctx.busy(None);
@@ -592,7 +589,7 @@ fn run_worker(
                 push_status(&mut ctx, Scan::System);
             }
             Cmd::SetOwnProxy(text) => {
-                ctx.busy(Some("Проверка прокси"));
+                ctx.busy(Some("正在检查代理"));
                 set_own_proxy(&mut ctx, &text);
                 ctx.settings.save();
                 push_status(&mut ctx, Scan::System);
@@ -604,7 +601,7 @@ fn run_worker(
                 push_status(&mut ctx, Scan::Settings);
             }
             Cmd::SetGroupKey(text) => {
-                ctx.busy(Some("Проверка ключа"));
+                ctx.busy(Some("正在验证密钥"));
                 match crate::group_key::parse_key(&text) {
                     Ok(_) => {
                         ctx.settings.group_key = text.trim().to_string();
@@ -612,7 +609,7 @@ fn run_worker(
                         ctx.settings.group_proxy = true;
                         ctx.settings.save();
                         apply(&mut ctx, Cap::GroupProxy, true);
-                        ctx.log(crate::ops::Level::Ok, "Ключ принят.");
+                        ctx.log(crate::ops::Level::Ok, "密钥验证通过。");
                         push_status(&mut ctx, scan_after(Cap::GroupProxy));
                     }
                     Err(e) => {
@@ -622,14 +619,14 @@ fn run_worker(
                 ctx.busy(None);
             }
             Cmd::EnableAll => {
-                ctx.busy(Some("Включаю"));
+                ctx.busy(Some("正在启用"));
                 enable_all(&mut ctx);
                 ctx.settings.save();
                 push_status(&mut ctx, Scan::Deep);
                 ctx.busy(None);
             }
             Cmd::Repair => {
-                ctx.busy(Some("Чиню службу обхода"));
+                ctx.busy(Some("正在修复解锁服务"));
                 repair(&mut ctx);
                 ctx.settings.save();
                 push_status(&mut ctx, Scan::System);
@@ -641,8 +638,11 @@ fn run_worker(
                 ctx.log(
                     Level::Info,
                     match first_enabled_provider(&ctx.settings) {
-                        Some(n) => format!("Порядок DNS изменён, первый — {}", n),
-                        None => "Порядок DNS изменён.".to_string(),
+                        Some(n) => format!(
+                            "DNS 顺序已更新，当前优先使用 {}",
+                            crate::resolvers::display_provider_name(n)
+                        ),
+                        None => "DNS 顺序已更新。".to_string(),
                     },
                 );
                 // The order is ours alone — nothing on the machine changed, so
@@ -655,21 +655,14 @@ fn run_worker(
                 // that still draws as installed.
                 if all_providers_disabled(&ctx.settings) {
                     ctx.settings.set_provider_enabled(&name, true);
-                    ctx.log(
-                        Level::Warn,
-                        "Нельзя отключить все DNS-серверы — хотя бы один должен остаться.",
-                    );
+                    ctx.log(Level::Warn, "至少需要保留一个已启用的 DNS 服务器。");
                 } else {
                     ctx.log(
                         Level::Info,
                         format!(
-                            "DNS-сервер {} {}",
-                            name,
-                            if on {
-                                "включён"
-                            } else {
-                                "отключён"
-                            }
+                            "DNS 服务器 {}：{}",
+                            crate::resolvers::display_provider_name(&name),
+                            if on { "已启用" } else { "已停用" }
                         ),
                     );
                 }
@@ -713,8 +706,7 @@ fn startup_housekeeping(ctx: &mut Ctx) {
     if before && !dns::is_nrpt_applied() {
         ctx.log(
             Level::Warn,
-            "Antigravity идёт через активный VPN — правила DNS сняты, чтобы не перебивать \
-             ваш туннель. Выключите VPN и включите «Обход через DNS» заново.",
+            "Antigravity 流量正在经过 VPN。为避免干扰隧道，已移除 DNS 规则。如需使用 DNS 解锁，请关闭 VPN 后重新启用。",
         );
     }
 }
@@ -854,8 +846,8 @@ impl Status {
             // rotation off, so the switch says which it is rather than leaving
             // the user to count down the list.
             State::OffNote(match first_enabled_provider(s) {
-                Some(name) => format!("используется только {}", name),
-                None => "ни один сервер не включён".to_string(),
+                Some(name) => format!("仅使用 {}", name),
+                None => "没有已启用的服务器".to_string(),
             })
         };
         self.providers = crate::resolvers::ordered_provider_names()
@@ -918,14 +910,14 @@ fn read_status(ctx: &mut Ctx, deep: bool) -> Status {
         // Not inspected yet, or nothing found. Fall back to what the user asked
         // for rather than claiming knowledge we do not have.
         if ctx.settings.client_patch {
-            State::Partial("состояние ещё не проверено".into())
+            State::Partial("尚未检查状态".into())
         } else {
             State::Off
         }
     } else if patched.iter().all(|p| *p) {
         State::On
     } else if patched.iter().any(|p| *p) {
-        State::Partial("пропатчены не все установки".into())
+        State::Partial("部分安装尚未应用补丁".into())
     } else {
         State::Off
     };
@@ -993,18 +985,15 @@ fn measure_vpn() -> (VpnSeen, Option<crate::egress::ClientEgress>) {
 /// not a change worth a line: it says only that Antigravity stopped running.
 fn vpn_change_line(now: VpnSeen) -> Option<&'static str> {
     match now {
-        VpnSeen::None => Some("VPN отключён — обход снова работает сам."),
-        VpnSeen::CarryingClient => Some(
-            "Antigravity пошёл через VPN — снятие ошибки 400 теперь зависит от вашего сервера.",
-        ),
-        VpnSeen::NotCarryingClient => Some("Трафик Antigravity идёт мимо VPN — обход применяется."),
-        VpnSeen::ViaLocalProxy => Some(
-            "Antigravity ходит через локальный прокси — до серверов Google \
-             соединение открывает служба обхода, а не он сам.",
-        ),
-        VpnSeen::PartlyCarryingClient => {
-            Some("Часть трафика Antigravity пошла через VPN, часть идёт мимо.")
+        VpnSeen::None => Some("VPN 已关闭，解锁服务恢复独立工作。"),
+        VpnSeen::CarryingClient => {
+            Some("Antigravity 正通过 VPN 连接，能否解除错误 400 取决于 VPN 出口。")
         }
+        VpnSeen::NotCarryingClient => Some("Antigravity 未经过 VPN，正在使用解锁服务。"),
+        VpnSeen::ViaLocalProxy => {
+            Some("Antigravity 正通过本地代理连接 Google，网络连接由解锁服务建立。")
+        }
+        VpnSeen::PartlyCarryingClient => Some("Antigravity 的部分连接经过 VPN，其他连接直连。"),
         VpnSeen::Unmeasured => None,
     }
 }
@@ -1021,7 +1010,7 @@ fn read_watchdog(admin: bool) -> State {
     if background::is_watchdog_enabled() {
         State::On
     } else if !admin && cfg!(target_os = "windows") {
-        State::Blocked("нужны права администратора".into())
+        State::Blocked("需要管理员权限".into())
     } else {
         State::Off
     }
@@ -1071,16 +1060,16 @@ fn dns_state(
         // The rules name the relay first (I5). Rules without it resolve through
         // the fallback providers only, which works but is not what was asked
         // for — and it is exactly what a crashed relay looks like.
-        (true, false) => State::Partial("правила стоят, служба не запущена".into()),
+        (true, false) => State::Partial("DNS 规则已安装，但服务未运行".into()),
         // A service that runs for the sake of a route (own proxy, group, exits)
         // is not a half-installed DNS layer: the DNS switch is off, and drawing
         // it as `Partial` - which reads as on - made it impossible to switch off
         // while any route kept the service up.
         (false, true) if !wanted => State::Off,
-        (false, true) => State::Partial("служба работает, правил нет".into()),
+        (false, true) => State::Partial("服务已运行，但缺少 DNS 规则".into()),
         (false, false) => {
             if !admin && cfg!(target_os = "windows") {
-                State::Blocked("нужны права администратора".into())
+                State::Blocked("需要管理员权限".into())
             } else {
                 State::Off
             }
@@ -1104,7 +1093,7 @@ fn read_local_proxy(settings: &Settings) -> State {
         // leaving both set silently hijacks a proxy the user configured on
         // purpose. Theirs means ours stays off - whatever the setting says.
         let _ = foreign;
-        return State::Blocked("в системе задан свой прокси".into());
+        return State::Blocked("系统已配置其他代理".into());
     }
     local_proxy_state(settings.local_proxy, endpoint::proxy_env_is_ours())
 }
@@ -1122,11 +1111,11 @@ fn local_proxy_state(wanted: bool, ours: bool) -> State {
         // answers, and `repair` does the same while the window is open. An
         // on-ish state, so `Partial` and never `OffNote` - the switch has to
         // stay switchable (G41).
-        (true, false) => State::Partial("переменная ещё не выставлена".into()),
+        (true, false) => State::Partial("尚未设置环境变量".into()),
         // Off, and the variable is still there: a removal that did not land.
         // The relay takes it off within a minute now; saying so beats a switch
         // that contradicts the service's own log.
-        (false, true) => State::OffNote("переменная ещё не снята".into()),
+        (false, true) => State::OffNote("环境变量尚未移除".into()),
         (false, false) => State::Off,
     }
 }
@@ -1145,7 +1134,7 @@ const INSTALL_KINDS: [&str; 4] = [
     "Antigravity 2.0",
     "Antigravity IDE",
     "Antigravity CLI",
-    "Antigravity для VS Code",
+    "Antigravity VS Code 扩展",
 ];
 
 fn collect_installs(
@@ -1226,10 +1215,7 @@ fn collect_installs(
 
 fn apply(ctx: &mut Ctx, cap: Cap, on: bool) {
     if cap.needs_admin() && !is_admin() {
-        ctx.log(
-            Level::Err,
-            "Нужны права администратора. Нажмите «Перезапустить от имени администратора».",
-        );
+        ctx.log(Level::Err, "需要管理员权限，请点击“以管理员身份重启”。");
         return;
     }
 
@@ -1264,7 +1250,7 @@ fn apply(ctx: &mut Ctx, cap: Cap, on: bool) {
             if !ctx.settings.save() {
                 ctx.log(
                     Level::Warn,
-                    "Настройки не сохранились (файл занят?) — автопатч может вернуть патч. Выключите и «Автопатч».",
+                    "设置保存失败，文件可能被占用。自动补丁可能会重新应用补丁，请同时关闭自动补丁功能。",
                 );
             }
             disable_client_patch(ctx);
@@ -1300,17 +1286,14 @@ fn apply(ctx: &mut Ctx, cap: Cap, on: bool) {
             if on {
                 let text = ctx.settings.own_proxy.clone();
                 if text.trim().is_empty() {
-                    ctx.log(
-                        Level::Warn,
-                        "Впишите адрес прокси, затем включите переключатель.",
-                    );
+                    ctx.log(Level::Warn, "请先填写代理地址，再开启此开关。");
                     ctx.settings.own_proxy_enabled = false;
                 } else {
                     set_own_proxy(ctx, &text);
                 }
             } else {
                 upstream::clear();
-                ctx.log(Level::Ok, "Свой прокси отключён.");
+                ctx.log(Level::Ok, "自定义代理已停用。");
                 release_route_carrier(ctx);
             }
         }
@@ -1321,15 +1304,13 @@ fn apply(ctx: &mut Ctx, cap: Cap, on: bool) {
             ctx.log(
                 Level::Ok,
                 if on {
-                    "Ротация включена — запрос идёт ко всем включённым серверам, ответ сверяется с эталонным."
-                        .to_string()
+                    "DNS 轮换已启用，将并行查询已启用的服务器，并核对解析结果。".to_string()
                 } else {
                     match first_enabled_provider(&ctx.settings) {
-                        Some(name) => format!(
-                            "Ротация выключена — используется только {}. Запасных серверов не будет.",
-                            name
-                        ),
-                        None => "Ротация выключена, но все серверы отключены.".to_string(),
+                        Some(name) => {
+                            format!("DNS 轮换已关闭，仅使用 {}，不启用备用服务器。", name)
+                        }
+                        None => "DNS 轮换已关闭，但没有已启用的服务器。".to_string(),
                     }
                 },
             );
@@ -1339,9 +1320,9 @@ fn apply(ctx: &mut Ctx, cap: Cap, on: bool) {
             ctx.log(
                 Level::Ok,
                 if on {
-                    "Прокси из группы включён."
+                    "群组代理已启用。"
                 } else {
-                    "Прокси из группы выключен."
+                    "群组代理已停用。"
                 },
             );
             if on {
@@ -1381,7 +1362,7 @@ fn enable_all(ctx: &mut Ctx) {
             // for a patch that is off too, with the bypass already running.
             ctx.log(
                 Level::Warn,
-                "Обход ошибки 400 не включён: нужны права администратора. Нажмите «Перезапустить от имени администратора».",
+                "地区限制解锁尚未启用，需要管理员权限。请点击“以管理员身份重启”。",
             );
             return;
         }
@@ -1399,7 +1380,7 @@ fn enable_all(ctx: &mut Ctx) {
     }
     ctx.log(
         Level::Ok,
-        "Готово. Откройте Antigravity и напишите что-нибудь в чат — здесь появится подтверждение, что модель ответила.",
+        "配置完成。请打开 Antigravity 并发送一条消息，收到模型回复后，这里会显示验证结果。",
     );
 }
 
@@ -1415,10 +1396,7 @@ fn patch_is_on(ctx: &Ctx) -> bool {
 /// installing it again and putting its rules and variable back.
 fn repair(ctx: &mut Ctx) {
     if cfg!(target_os = "windows") && !is_admin() {
-        ctx.log(
-            Level::Err,
-            "Нужны права администратора. Нажмите «Перезапустить от имени администратора».",
-        );
+        ctx.log(Level::Err, "需要管理员权限，请点击“以管理员身份重启”。");
         return;
     }
     // DNS is put back only when it was wanted, or when nothing else is: a user
@@ -1430,10 +1408,10 @@ fn repair(ctx: &mut Ctx) {
     // `ensure_running` reinstalls only a copy that differs from this build;
     // a relay that is merely stopped or outdated needs the full `enable`.
     if let Err(e) = background::enable() {
-        ctx.log(Level::Err, format!("Служба обхода не запустилась: {}", e));
+        ctx.log(Level::Err, format!("解锁服务启动失败：{}", e));
         return;
     }
-    ctx.log(Level::Ok, "Служба обхода переустановлена и запущена.");
+    ctx.log(Level::Ok, "解锁服务已重新安装并启动。");
     if with_dns {
         enable_dns(ctx);
     } else {
@@ -1504,7 +1482,7 @@ fn patch_found(ctx: &mut Ctx, found: Vec<(&'static str, PathBuf)>) -> bool {
         return false;
     }
 
-    ctx.busy(Some("Автопатч"));
+    ctx.busy(Some("自动补丁"));
     let mut wrote = false;
     for (label, inst) in found {
         // Never a password prompt nobody asked for: the automatic pass leaves a
@@ -1513,7 +1491,7 @@ fn patch_found(ctx: &mut Ctx, found: Vec<(&'static str, PathBuf)>) -> bool {
             ctx.log(
                 Level::Warn,
                 format!(
-                    "Автопатч: {} — установка принадлежит root. Нажмите «Включить всё» и введите пароль.",
+                    "自动补丁：{} 的安装属于 root，请点击“全部启用”并输入系统密码。",
                     label
                 ),
             );
@@ -1527,7 +1505,8 @@ fn patch_found(ctx: &mut Ctx, found: Vec<(&'static str, PathBuf)>) -> bool {
                 patch_binary::RepatchOutcome::Repatched(_) => patched += 1,
                 patch_binary::RepatchOutcome::AlreadyPatched => {}
                 patch_binary::RepatchOutcome::SignatureMissing => unknown += 1,
-                patch_binary::RepatchOutcome::Failed(e) | patch_binary::RepatchOutcome::Deferred(e) => failed = Some(e),
+                patch_binary::RepatchOutcome::Failed(e)
+                | patch_binary::RepatchOutcome::Deferred(e) => failed = Some(e),
             }
         }
         let where_ = crate::utils::mask_path(&inst.display().to_string());
@@ -1535,14 +1514,14 @@ fn patch_found(ctx: &mut Ctx, found: Vec<(&'static str, PathBuf)>) -> bool {
             wrote = true;
             ctx.log(
                 Level::Ok,
-                format!("Автопатч: {} — патч наложен ({})", label, where_),
+                format!("自动补丁：{} 已应用补丁（{}）", label, where_),
             );
         }
         if let Some(e) = failed {
             ctx.log(
                 Level::Warn,
                 format!(
-                    "Автопатч: {} — не удалось записать ({}). Закройте Antigravity и нажмите «Включить всё».",
+                    "自动补丁：{} 写入失败（{}）。请关闭 Antigravity 后点击“全部启用”。",
                     label, e
                 ),
             );
@@ -1552,7 +1531,7 @@ fn patch_found(ctx: &mut Ctx, found: Vec<(&'static str, PathBuf)>) -> bool {
             ctx.log(
                 Level::Warn,
                 format!(
-                    "Автопатч: {} — эта сборка Antigravity анлокеру ещё не знакома, файлы не тронуты. Нужна новая версия анлокера.",
+                    "自动补丁：暂不支持 {} 的 Antigravity 版本，未修改文件，请更新解锁器。",
                     label
                 ),
             );
@@ -1569,7 +1548,7 @@ fn patch_found(ctx: &mut Ctx, found: Vec<(&'static str, PathBuf)>) -> bool {
 }
 
 fn enable_client_patch(ctx: &mut Ctx) -> bool {
-    ctx.log(Level::Step, "Патч клиента Antigravity");
+    ctx.log(Level::Step, "正在应用 Antigravity 客户端补丁");
     patch_binary::kill_affected_processes();
 
     let installs = crate::find_all_installs();
@@ -1584,7 +1563,7 @@ fn enable_client_patch(ctx: &mut Ctx) -> bool {
     if targets.is_empty() {
         ctx.log(
             Level::Err,
-            "Установки Antigravity не найдены. Укажите путь вручную (карандаш).",
+            "未找到 Antigravity 安装，请点击铅笔图标手动指定路径。",
         );
         return false;
     }
@@ -1601,7 +1580,7 @@ fn enable_client_patch(ctx: &mut Ctx) -> bool {
             let where_ = crate::utils::mask_path(&inst.display().to_string());
             ctx.log(
                 Level::Step,
-                format!("{where_} принадлежит root — запрашиваю пароль для записи патча"),
+                format!("{where_} 属于 root，正在请求系统密码以写入补丁"),
             );
             match crate::elevate::patch_as_root(inst) {
                 Ok(done) => {
@@ -1654,7 +1633,7 @@ fn enable_client_patch(ctx: &mut Ctx) -> bool {
     }
 
     if ok == 0 {
-        ctx.log(Level::Err, "Ни одна установка не пропатчена.");
+        ctx.log(Level::Err, "没有成功应用补丁的安装。");
         return false;
     }
 
@@ -1662,12 +1641,12 @@ fn enable_client_patch(ctx: &mut Ctx) -> bool {
     // while the relay is still an older build.
     crate::remove_legacy_ca_quiet();
 
-    ctx.log(Level::Ok, format!("Пропатчено установок: {}", ok));
+    ctx.log(Level::Ok, format!("已应用补丁的安装数：{}", ok));
     true
 }
 
 fn disable_client_patch(ctx: &mut Ctx) {
-    ctx.log(Level::Step, "Снятие патча клиента");
+    ctx.log(Level::Step, "正在撤销客户端补丁");
 
     // I20: a live watchdog treats an unpatch as an update and puts the patch
     // straight back. Both of them stop first — the standalone task and the one
@@ -1685,7 +1664,7 @@ fn disable_client_patch(ctx: &mut Ctx) {
     let want_relay = ctx.settings.dns;
     background::disable_watchdog();
     if let Err(e) = background::disable() {
-        ctx.log(Level::Warn, format!("Служба DNS не остановлена: {}", e));
+        ctx.log(Level::Warn, format!("DNS 服务未能停止：{}", e));
     }
 
     patch_binary::kill_affected_processes();
@@ -1714,7 +1693,7 @@ fn disable_client_patch(ctx: &mut Ctx) {
         let done = if patched_here && crate::elevate::needs_root(inst) {
             ctx.log(
                 Level::Info,
-                format!("{} — установка принадлежит root, запрашиваю пароль", where_),
+                format!("{} 的安装属于 root，正在请求系统密码", where_),
             );
             match crate::elevate::unpatch_as_root(inst) {
                 Ok(d) => d,
@@ -1734,15 +1713,12 @@ fn disable_client_patch(ctx: &mut Ctx) {
         }
         let reverted = done.files;
         if let Err(e) = endpoint::remove_ide(inst) {
-            ctx.log(Level::Warn, format!("Оверрайд эндпоинта не снят: {}", e));
+            ctx.log(Level::Warn, format!("端点覆盖设置未能移除：{}", e));
         }
-        ctx.log(
-            Level::Ok,
-            format!("{} — возвращено файлов: {}", where_, reverted),
-        );
+        ctx.log(Level::Ok, format!("{}：已还原 {} 个文件", where_, reverted));
     }
     if let Err(e) = endpoint::remove_cli() {
-        ctx.log(Level::Warn, format!("Переменная CLI не снята: {}", e));
+        ctx.log(Level::Warn, format!("CLI 环境变量未能移除：{}", e));
     }
 
     // The proxy variable is only read by a patched binary, so an unpatched
@@ -1753,10 +1729,7 @@ fn disable_client_patch(ctx: &mut Ctx) {
 
     if want_relay {
         if let Err(e) = background::ensure_running() {
-            ctx.log(
-                Level::Warn,
-                format!("Служба DNS не поднялась обратно: {}", e),
-            );
+            ctx.log(Level::Warn, format!("DNS 服务未能重新启动：{}", e));
         }
     }
 }
@@ -1766,36 +1739,33 @@ fn disable_client_patch(ctx: &mut Ctx) {
 fn set_watchdog(ctx: &mut Ctx, on: bool) {
     if !on {
         background::disable_watchdog();
-        ctx.log(Level::Ok, "Автовосстановление патча отключено.");
+        ctx.log(Level::Ok, "自动补丁已关闭。");
         return;
     }
     // The task launches the copy in %ProgramData%, so it has to be there - but
     // only the file: starting the relay here switched the 400 bypass on for a
     // user who asked for auto-patch alone.
     if let Err(e) = background::ensure_installed() {
-        ctx.log(
-            Level::Warn,
-            format!("Не удалось установить копию для автопатча: {}", e),
-        );
+        ctx.log(Level::Warn, format!("无法安装自动补丁组件：{}", e));
     }
     match background::enable_watchdog() {
-        Ok(()) => ctx.log(Level::Ok, "Автовосстановление патча включено."),
-        Err(e) => ctx.log(Level::Err, format!("Не удалось включить: {}", e)),
+        Ok(()) => ctx.log(Level::Ok, "自动补丁已开启。"),
+        Err(e) => ctx.log(Level::Err, format!("启用失败：{}", e)),
     }
 }
 
 // --- DNS -------------------------------------------------------------------
 
 fn enable_dns(ctx: &mut Ctx) {
-    ctx.log(Level::Step, "Обход через DNS");
+    ctx.log(Level::Step, "DNS 解锁");
 
     // I5: the rules name the relay as their first nameserver, so it has to be
     // answering before they are written.
     if let Err(e) = background::ensure_running() {
-        ctx.log(Level::Err, format!("Служба DNS не запустилась: {}", e));
+        ctx.log(Level::Err, format!("DNS 服务启动失败：{}", e));
         return;
     }
-    ctx.log(Level::Ok, "Локальная служба DNS запущена.");
+    ctx.log(Level::Ok, "本地 DNS 服务已启动。");
 
     match dns::setup_dns_nrpt() {
         Ok(outcome) => {
@@ -1810,17 +1780,16 @@ fn enable_dns(ctx: &mut Ctx) {
                 // tunnel anyway (D13, G26, G29).
                 ctx.log(
                     Level::Warn,
-                    "Обнаружен активный VPN, через который идёт Antigravity — \
-                     правила DNS не создавались. Выключите VPN и включите переключатель заново.",
+                    "Antigravity 正通过 VPN 连接，未创建 DNS 规则。请关闭 VPN 后重新开启此开关。",
                 );
             } else {
-                ctx.log(Level::Ok, "Правила DNS установлены.");
+                ctx.log(Level::Ok, "DNS 规则已安装。");
             }
             if let Some(note) = dns::outcome_note(&outcome) {
                 ctx.log(Level::Info, strip_ansi(&note));
             }
         }
-        Err(e) => ctx.log(Level::Err, format!("Правила DNS не установлены: {}", e)),
+        Err(e) => ctx.log(Level::Err, format!("DNS 规则安装失败：{}", e)),
     }
 
     // Both of these were taken down *by* `disable_dns` rather than by the user,
@@ -1835,7 +1804,7 @@ fn enable_dns(ctx: &mut Ctx) {
 }
 
 fn disable_dns(ctx: &mut Ctx) {
-    ctx.log(Level::Step, "Отключение обхода через DNS");
+    ctx.log(Level::Step, "正在关闭 DNS 解锁");
 
     // The relay is also the carrier of every route (local proxy, own proxy,
     // group, exits): it stays while any of them is wanted, and only the rules
@@ -1854,11 +1823,11 @@ fn disable_dns(ctx: &mut Ctx) {
     // I45: both steps run regardless of what the first one did.
     dns::remove_dns_nrpt();
     dns::invalidate_cache();
-    ctx.log(Level::Ok, "Правила DNS сняты.");
+    ctx.log(Level::Ok, "DNS 规则已移除。");
     if keep_relay {
         ctx.log(
             Level::Info,
-            "Служба осталась запущенной: она нужна включённым прокси и выходам.",
+            "后台服务将继续运行，已启用的代理和出口仍需要它。",
         );
     } else {
         stop_relay(ctx);
@@ -1919,18 +1888,12 @@ fn restart_stale_holders(ctx: &mut Ctx) {
         }
     }
     if !shells.is_empty() {
-        ctx.log(
-            Level::Step,
-            "Перезапуск Antigravity: он запомнил адрес выключенного прокси",
-        );
+        ctx.log(Level::Step, "正在重启 Antigravity，清除其缓存的旧代理地址");
         patch_binary::kill_affected_processes();
         for path in &shells {
             launch_clean(path, endpoint::PROXY_ENV_VAR);
         }
-        ctx.log(
-            Level::Ok,
-            "Antigravity перезапущен и обращается к Google напрямую.",
-        );
+        ctx.log(Level::Ok, "Antigravity 已重启，现已直连 Google。");
     }
     // Only when the extension's backend is actually running: every editor
     // started while the bypass was on holds the variable, used or not.
@@ -1941,7 +1904,7 @@ fn restart_stale_holders(ctx: &mut Ctx) {
         ctx.log(
             Level::Info,
             format!(
-                "Расширение Antigravity помнит адрес выключенного прокси — перезапустите {}.",
+                "Antigravity 扩展仍缓存着已停用的代理地址，请重启 {}。",
                 others.join(", ")
             ),
         );
@@ -1977,11 +1940,8 @@ fn stop_relay(ctx: &mut Ctx) {
         background::disable_watchdog();
     }
     match background::disable() {
-        Ok(()) => ctx.log(Level::Ok, "Локальная служба DNS остановлена."),
-        Err(e) => ctx.log(
-            Level::Warn,
-            format!("Служба остановлена не полностью: {}", e),
-        ),
+        Ok(()) => ctx.log(Level::Ok, "本地 DNS 服务已停止。"),
+        Err(e) => ctx.log(Level::Warn, format!("部分服务未能停止：{}", e)),
     }
     if restore_watchdog {
         set_watchdog(ctx, true);
@@ -2006,12 +1966,12 @@ fn ensure_route_carrier(ctx: &mut Ctx) {
     if cfg!(target_os = "windows") && !is_admin() {
         ctx.log(
             Level::Warn,
-            "Служба обхода не запущена: нужны права администратора. Нажмите «Перезапустить от имени администратора».",
+            "解锁服务未运行，需要管理员权限。请点击“以管理员身份重启”。",
         );
         return;
     }
     if let Err(e) = background::ensure_running() {
-        ctx.log(Level::Err, format!("Служба обхода не запустилась: {}", e));
+        ctx.log(Level::Err, format!("解锁服务启动失败：{}", e));
         return;
     }
     // Wanted, whatever `enable_local_proxy` manages below: the relay writes the
@@ -2076,19 +2036,16 @@ fn reapply_dns_rules(ctx: &mut Ctx) -> bool {
         return false;
     }
     if !is_admin() && cfg!(target_os = "windows") {
-        ctx.log(
-            Level::Warn,
-            "Список DNS сохранён, но правила не переписаны — нужны права администратора.",
-        );
+        ctx.log(Level::Warn, "DNS 列表已保存，但更新规则需要管理员权限。");
         return false;
     }
     match dns::setup_dns_nrpt() {
         Ok(_) => {
             dns::invalidate_cache();
             dns::flush_client_cache();
-            ctx.log(Level::Ok, "Правила DNS переписаны под новый список.");
+            ctx.log(Level::Ok, "DNS 规则已按新列表更新。");
         }
-        Err(e) => ctx.log(Level::Warn, format!("Правила DNS не переписаны: {}", e)),
+        Err(e) => ctx.log(Level::Warn, format!("DNS 规则更新失败：{}", e)),
     }
     true
 }
@@ -2096,16 +2053,19 @@ fn reapply_dns_rules(ctx: &mut Ctx) -> bool {
 // --- local proxy -----------------------------------------------------------
 
 fn enable_local_proxy(ctx: &mut Ctx) {
-    ctx.log(Level::Step, "Локальный прокси");
+    ctx.log(Level::Step, "本地代理");
     let url = proxy::proxy_url();
 
     // 1. The user-wide pair that builds up to 2.11.0_4 wrote. It goes first:
     //    leaving it puts the whole machine through loopback (D19).
     match endpoint::remove_legacy_proxy_env(&url) {
-        Ok(true) => ctx.log(Level::Ok, "Прежняя общесистемная HTTPS_PROXY снята."),
+        Ok(true) => ctx.log(Level::Ok, "旧的系统级 HTTPS_PROXY 环境变量已移除。"),
         Ok(false) => {}
         Err(e) => {
-            ctx.log(Level::Err, format!("Прежняя HTTPS_PROXY не снята: {}", e));
+            ctx.log(
+                Level::Err,
+                format!("旧的 HTTPS_PROXY 环境变量未能移除：{}", e),
+            );
             return;
         }
     }
@@ -2118,7 +2078,7 @@ fn enable_local_proxy(ctx: &mut Ctx) {
             Ok(()) => {
                 ctx.log(
                     Level::Warn,
-                    "В системе задан свой прокси — наш не включаем, чтобы не перехватывать чужой.",
+                    "系统已配置其他代理，将保留现有配置，不启用本地代理。",
                 );
                 ctx.settings.local_proxy = false;
             }
@@ -2129,10 +2089,7 @@ fn enable_local_proxy(ctx: &mut Ctx) {
             // recorded as a switch that did.
             Err(e) => ctx.log(
                 Level::Err,
-                format!(
-                    "В системе задан свой прокси, но нашу переменную снять не удалось: {}",
-                    e
-                ),
+                format!("系统已配置其他代理，但本工具的代理环境变量未能移除：{}", e),
             ),
         }
         return;
@@ -2144,10 +2101,9 @@ fn enable_local_proxy(ctx: &mut Ctx) {
         ctx.log(
             Level::Err,
             if ctx.proxy_var_retryable {
-                "Файл был занят — закройте Antigravity полностью и включите переключатель заново."
+                "文件被占用，请完全退出 Antigravity 后重新开启此开关。"
             } else {
-                "В этой сборке Antigravity нет места для переменной прокси — \
-                 вероятно, вышла новая версия и нужен более новый анлокер."
+                "当前 Antigravity 版本中未找到可修改的代理环境变量，可能需要更新解锁器。"
             },
         );
         return;
@@ -2159,17 +2115,14 @@ fn enable_local_proxy(ctx: &mut Ctx) {
     //    move the proxy while this waits (P26), and a URL for the port it left
     //    would be a dead one no watchdog takes back off.
     let Some(port) = proxy::wait_for_our_listener(Duration::from_secs(3)) else {
-        ctx.log(
-            Level::Err,
-            "Локальный прокси не отвечает — сначала включите «Обход через DNS».",
-        );
+        ctx.log(Level::Err, "本地代理无响应，请先开启“DNS 解锁”。");
         return;
     };
     let url = proxy::url_at(port);
 
     match endpoint::apply_proxy(&url, "") {
-        Ok(_) => ctx.log(Level::Ok, "Локальный прокси включён."),
-        Err(e) => ctx.log(Level::Err, format!("Не удалось включить: {}", e)),
+        Ok(_) => ctx.log(Level::Ok, "本地代理已开启。"),
+        Err(e) => ctx.log(Level::Err, format!("启用失败：{}", e)),
     }
 }
 
@@ -2178,8 +2131,8 @@ fn disable_local_proxy(ctx: &mut Ctx) {
     // I45 again: `remove_proxy` collects its own failures and joins them, so a
     // half-failed removal still takes off everything it can.
     match endpoint::remove_proxy(&url, "") {
-        Ok(()) => ctx.log(Level::Ok, "Локальный прокси отключён."),
-        Err(e) => ctx.log(Level::Warn, format!("Снято не полностью: {}", e)),
+        Ok(()) => ctx.log(Level::Ok, "本地代理已关闭。"),
+        Err(e) => ctx.log(Level::Warn, format!("部分设置未能移除：{}", e)),
     }
 }
 
@@ -2192,7 +2145,7 @@ fn set_custom_dns(ctx: &mut Ctx, text: &str) {
     let text = text.trim();
     if text.is_empty() {
         ctx.settings.custom_dns.clear();
-        ctx.log(Level::Ok, "Свой DNS убран.");
+        ctx.log(Level::Ok, "自定义 DNS 已移除。");
         return;
     }
     let found = match crate::resolvers::parse_custom_dns(text) {
@@ -2202,24 +2155,20 @@ fn set_custom_dns(ctx: &mut Ctx, text: &str) {
             ctx.log(
                 Level::Err,
                 format!(
-                    "{} Принимаются IPv4-адрес (77.88.8.8), DoH (https://dns.example.com/dns-query)                      и DoT (tls://dns.example.com), через пробел.",
+                    "{} 支持 IPv4 地址（77.88.8.8）、DoH（https://dns.example.com/dns-query）和 DoT（tls://dns.example.com），多个地址以空格分隔。",
                     e
                 ),
             );
             return;
         }
     };
-    ctx.settings.custom_dns = found
-        .iter()
-        .map(|s| s.text())
-        .collect::<Vec<_>>()
-        .join(" ");
+    ctx.settings.custom_dns = found.iter().map(|s| s.text()).collect::<Vec<_>>().join(" ");
     ctx.settings
         .set_provider_enabled(crate::resolvers::CUSTOM_NAME, true);
     ctx.log(
         Level::Ok,
         format!(
-            "Свой DNS сохранён ({}). Он участвует в пуле наравне с остальными: ответ сверяется с эталонным.",
+            "自定义 DNS 已保存（{}），将与其他服务器共同参与解析，并核对响应结果。",
             ctx.settings.custom_dns
         ),
     );
@@ -2230,7 +2179,7 @@ fn set_own_proxy(ctx: &mut Ctx, text: &str) {
     if ctx.settings.own_proxy.is_empty() {
         upstream::clear();
         ctx.settings.own_proxy_enabled = false;
-        ctx.log(Level::Ok, "Свой прокси убран.");
+        ctx.log(Level::Ok, "自定义代理已移除。");
         release_route_carrier(ctx);
         return;
     }
@@ -2238,7 +2187,7 @@ fn set_own_proxy(ctx: &mut Ctx, text: &str) {
     let up = match upstream::parse(&ctx.settings.own_proxy) {
         Ok(u) => u,
         Err(e) => {
-            ctx.log(Level::Err, format!("Адрес не разобран: {}", e));
+            ctx.log(Level::Err, format!("无法解析代理地址：{}", e));
             ctx.settings.own_proxy_enabled = false;
             return;
         }
@@ -2250,13 +2199,13 @@ fn set_own_proxy(ctx: &mut Ctx, text: &str) {
     // one that draws a region 400 is benched by the watch (G81). Refusing to save
     // it made the user keep a proxy they wanted out of the table altogether.
     if let Err(e) = upstream::save(&up) {
-        ctx.log(Level::Err, format!("Не сохранён: {}", e));
+        ctx.log(Level::Err, format!("保存失败：{}", e));
         ctx.settings.own_proxy_enabled = false;
         return;
     }
     ctx.settings.own_proxy_enabled = true;
     ctx.settings.own_proxy_at = crate::gate::now_unix();
-    ctx.log(Level::Ok, format!("Свой прокси включён: {}", up.display()));
+    ctx.log(Level::Ok, format!("自定义代理已启用：{}", up.display()));
     // Alone it needs the service and the variable; DNS is not part of it.
     ensure_route_carrier(ctx);
 
@@ -2265,16 +2214,13 @@ fn set_own_proxy(ctx: &mut Ctx, text: &str) {
     // Google, and the region is judged by the refusal Google actually gives -
     // Cloudflare's geolocation only guessed at it, and no unsigned Google call
     // can tell (401/403 from any exit, measured).
-    ctx.log(Level::Info, "Проверяю прокси…");
+    ctx.log(Level::Info, "正在检查代理…");
     match upstream::probe(&up) {
-        Ok(()) => ctx.log(Level::Ok, "Прокси отвечает."),
+        Ok(()) => ctx.log(Level::Ok, "代理响应正常。"),
         Err(e) => {
             ctx.log(
                 Level::Warn,
-                format!(
-                    "Прокси не отвечает: {} — сохранён всё равно; пока он не отвечает, запросы пойдут другими маршрутами.",
-                    e
-                ),
+                format!("代理未响应（{}），配置仍已保存；恢复前将使用其他线路。", e),
             );
         }
     }
@@ -2313,8 +2259,8 @@ mod tests {
 
     #[test]
     fn terminal_colours_do_not_reach_the_window() {
-        let coloured = "\x1b[33mвнимание\x1b[0m\x1b[92m: правило";
-        assert_eq!(strip_ansi(coloured), "внимание: правило");
+        let coloured = "\x1b[33m注意\x1b[0m\x1b[92m：规则";
+        assert_eq!(strip_ansi(coloured), "注意：规则");
     }
 
     #[test]
@@ -2375,7 +2321,7 @@ mod tests {
         // Half-patched must not draw as off: the user would flip it on and get
         // a no-op on the installs that are already done.
         assert!(State::Partial("x".into()).is_on());
-        assert!(!State::Blocked("нет прав".into()).is_on());
+        assert!(!State::Blocked("权限不足".into()).is_on());
         assert!(!State::Off.is_on());
     }
 

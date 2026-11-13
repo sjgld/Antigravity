@@ -31,7 +31,7 @@ fn backup_once(target: &Path) {
         return;
     }
     if let Err(e) = fs::copy(target, &bak) {
-        eprintln!("  [WARN] бэкап {} не создан: {}", target.display(), e);
+        eprintln!("  [WARN] 无法创建备份 {}：{}", target.display(), e);
     }
 }
 
@@ -67,10 +67,9 @@ fn write_atomic(path: &Path, content: &str) -> std::io::Result<()> {
 fn restore_js(target: &Path) -> Result<bool, String> {
     let bak = backup_path(target);
     if bak.exists() {
-        let data = fs::read(&bak).map_err(|e| format!("не прочитать бэкап: {}", e))?;
+        let data = fs::read(&bak).map_err(|e| format!("无法读取备份：{}", e))?;
         let text = String::from_utf8_lossy(&data).into_owned();
-        write_atomic(target, &text)
-            .map_err(|e| format!("не записать {}: {}", target.display(), e))?;
+        write_atomic(target, &text).map_err(|e| format!("无法写入 {}：{}", target.display(), e))?;
         fs::remove_file(&bak).ok();
         return Ok(true);
     }
@@ -79,10 +78,9 @@ fn restore_js(target: &Path) -> Result<bool, String> {
     };
     if let Some(stripped) = strip_marker(&content) {
         write_atomic(target, &stripped)
-            .map_err(|e| format!("не записать {}: {}", target.display(), e))?;
+            .map_err(|e| format!("无法写入 {}：{}", target.display(), e))?;
         eprintln!(
-            "  [WARN] {}: бэкап отсутствует — снят только маркер, тело патча осталось \
-             (для чистого возврата переустановите Antigravity)",
+            "  [WARN] {} 缺少备份，仅移除了标记，补丁内容仍在。如需完全还原，请重新安装 Antigravity。",
             target.display()
         );
         return Ok(true);
@@ -160,7 +158,7 @@ pub fn patch_ide(_inst: &Path, main_js: &Path) -> Result<(), String> {
     }
 
     if detect_stacked_ide(&content) || has_marker(&content) {
-        return Err("Обнаружена старая версия патча. Пожалуйста, выполните чистую переустановку Antigravity IDE перед повторным патчем.".into());
+        return Err("检测到旧版补丁。请先完整重新安装 Antigravity IDE，再应用此补丁。".into());
     }
 
     obfstr::obfstr! {
@@ -211,7 +209,7 @@ pub fn patch_ide(_inst: &Path, main_js: &Path) -> Result<(), String> {
         write_atomic(main_js, &new_content).map_err(|e| e.to_string())?;
         Ok(())
     } else {
-        Err("Сигнатура не найдена (возможно, установлена другая версия)".to_string())
+        Err("未找到补丁特征，可能是版本不匹配".to_string())
     }
 }
 
@@ -237,7 +235,7 @@ pub fn repatch_ide_js(main_js: &Path) -> RepatchOutcome {
         // "Signature not found" and "old patch, reinstall" are both give-up
         // conditions - a human has to act, so surface the app's own error
         // instead of guessing. Anything else is an I/O problem worth retrying.
-        Err(e) if e.contains("Сигнатура") || e.contains("старая версия") => {
+        Err(e) if e.contains("补丁特征") || e.contains("旧版") => {
             RepatchOutcome::SignatureMissing
         }
         Err(e) => RepatchOutcome::Failed(e),
@@ -266,9 +264,9 @@ pub fn patch_desktop(_inst: &Path, main_js: &Path) -> Result<bool, String> {
     if is_new_desktop_architecture(&cleaned) {
         if cleaned != content {
             fs::write(main_js, &cleaned).map_err(|e| e.to_string())?;
-            println!("  [INFO] Удалён устаревший JS-патч");
+            println!("  [INFO] 已移除旧的 JS 补丁");
         }
-        println!("  [INFO] v2.4+ архитектура — JS-патч не требуется (auth в Language Server)");
+        println!("  [INFO] v2.4+ 架构无需 JS 补丁，认证由语言服务器处理");
         return Ok(false);
     }
 
@@ -672,7 +670,7 @@ pub fn patch_extension_js(inst: &Path) -> Result<bool, String> {
     });
 
     if new_content == content {
-        return Err("Сигнатура extension.js не найдена (возможно, другая версия)".to_string());
+        return Err("未找到 extension.js 补丁特征，可能是版本不匹配".to_string());
     }
 
     // Leading fence stays the idempotence check; the trailing marker is the

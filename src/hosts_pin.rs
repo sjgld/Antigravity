@@ -84,7 +84,7 @@ fn rewrite(block: Option<&str>) -> Result<(), String> {
     }
     fs::write(&path, updated).map_err(|e| {
         if e.kind() == std::io::ErrorKind::PermissionDenied {
-            "hosts: требуются права администратора".to_string()
+            "修改 hosts 需要管理员权限".to_string()
         } else {
             format!("hosts: {}", e)
         }

@@ -290,7 +290,7 @@ fn process_name(pid: u32) -> Option<String> {
     // PID 4 is the kernel: a listener it owns is HTTP.sys, i.e. IIS or a
     // service that registered a URL with it. Its name would say nothing.
     if pid == 4 {
-        return Some("служба Windows HTTP (IIS или похожая)".to_string());
+        return Some("Windows HTTP 服务（IIS 等）".to_string());
     }
     unsafe {
         let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);

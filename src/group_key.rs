@@ -31,11 +31,11 @@ pub enum KeyError {
 impl fmt::Display for KeyError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            KeyError::NotAKey => write!(f, "Это не ключ доступа — скопируйте ответ бота целиком"),
-            KeyError::Damaged => write!(f, "Ключ повреждён"),
+            KeyError::NotAKey => write!(f, "这不是有效的访问密钥，请完整复制机器人的回复。"),
+            KeyError::Damaged => write!(f, "密钥已损坏"),
             KeyError::OtherPc => write!(
                 f,
-                "Этот ключ выдан для другого ПК (код {})",
+                "此密钥属于另一台电脑（设备码：{}）",
                 crate::hwid::pc_code()
             ),
         }
@@ -298,7 +298,12 @@ mod tests {
 
     #[test]
     fn parse_key_errors() {
-        assert!(matches!(parse_key("not_a_key"), Err(KeyError::NotAKey)));
+        // Public builds have no private wrap key. Test input classification
+        // with the reference key, independently of the build-time secret.
+        assert!(matches!(
+            parse_with(&vec_t(), "not_a_key", "t146sdha"),
+            Err(KeyError::NotAKey)
+        ));
         assert!(matches!(
             parse_key("agk1.invalid"),
             Err(KeyError::Damaged) | Err(KeyError::NotAKey)

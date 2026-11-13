@@ -120,7 +120,7 @@ impl Health {
             return;
         }
         crate::dns_forwarder::log_proxy(&format!(
-            "{} отложен на {} мин — не отвечает; трафик идёт другим путём",
+            "{} 暂缓使用 {} 分钟：无响应，请求将切换到其他线路",
             self.label,
             how_long.as_secs() / 60
         ));
@@ -138,7 +138,7 @@ impl Health {
         }
         self.clear_streak();
         if was {
-            crate::dns_forwarder::log_proxy(&format!("{} снова в работе — {}", self.label, why));
+            crate::dns_forwarder::log_proxy(&format!("{} 已恢复可用：{}", self.label, why));
         }
     }
 
@@ -158,7 +158,7 @@ impl Health {
 mod tests {
     use super::*;
 
-    static T: Health = Health::new("тест");
+    static T: Health = Health::new("测试");
 
     /// The whole contract, in the order it actually happens: one failure is
     /// tolerated, two are not, a burst that follows changes nothing, a probe

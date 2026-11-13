@@ -20,7 +20,7 @@ pub fn view(app: &mut App, ui: &mut egui::Ui) {
     ui.vertical_centered(|ui| {
         ui.add_space(40.0);
         ui.label(
-            egui::RichText::new("Antigravity Unlocker")
+            egui::RichText::new("Antigravity 解锁器")
                 .size(28.0)
                 .strong(),
         );
@@ -46,7 +46,7 @@ pub fn view(app: &mut App, ui: &mut egui::Ui) {
     let can_continue = normalized_len == 24 && !in_cooldown;
 
     widgets::card(ui, |ui| {
-        ui.label(egui::RichText::new("Лицензионный ключ").size(15.0).strong());
+        ui.label(egui::RichText::new("授权密钥").size(15.0).strong());
         ui.add_space(8.0);
 
         let field = egui::TextEdit::singleline(&mut app.key_input)
@@ -57,7 +57,7 @@ pub fn view(app: &mut App, ui: &mut egui::Ui) {
             .font(egui::TextStyle::Monospace);
         let resp = ui
             .add(field)
-            .on_hover_text("Правый клик — вставить ключ из буфера обмена (поле очищается).");
+            .on_hover_text("右键粘贴剪贴板中的密钥，将替换当前内容。");
         if app.key_needs_focus {
             resp.request_focus();
             app.key_needs_focus = false;
@@ -86,9 +86,9 @@ pub fn view(app: &mut App, ui: &mut egui::Ui) {
         ui.add_space(10.0);
         let mut pressed = false;
         ui.horizontal(|ui| {
-            pressed = widgets::primary(ui, "Продолжить", can_continue).clicked();
+            pressed = widgets::primary(ui, "继续", can_continue).clicked();
             ui.add_space(8.0);
-            if widgets::ghost(ui, "Взять ключ из группы").clicked() {
+            if widgets::ghost(ui, "前往群组获取密钥").clicked() {
                 crate::utils::open_url(TELEGRAM_KEYS_URL);
             }
         });
@@ -135,7 +135,7 @@ pub fn view(app: &mut App, ui: &mut egui::Ui) {
         if app.key_rejected {
             ui.add_space(8.0);
             ui.label(
-                egui::RichText::new("Ключ не подходит к этой версии анлокера.")
+                egui::RichText::new("此密钥不适用于当前版本的解锁器。")
                     .color(theme::BAD)
                     .size(13.0),
             );
@@ -155,14 +155,14 @@ pub fn view(app: &mut App, ui: &mut egui::Ui) {
     if in_cooldown_post {
         ui.add_space(8.0);
         ui.label(
-            egui::RichText::new("Подождите…")
+            egui::RichText::new("请稍候…")
                 .color(theme::MUTED)
                 .size(12.5),
         );
     } else if !app.key_input.trim().is_empty() && normalized_len != 24 {
         ui.add_space(8.0);
         ui.label(
-            egui::RichText::new("Введите ключ подходящей длины")
+            egui::RichText::new("请输入长度正确的密钥")
                 .color(theme::MUTED)
                 .size(12.5),
         );
