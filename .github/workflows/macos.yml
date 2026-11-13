@@ -3,6 +3,13 @@ name: macOS 简体中文版 (Apple Silicon)
 on:
   workflow_dispatch:
     inputs:
+      runner:
+        description: 'Apple Silicon 构建环境（可切换以避开繁忙队列）'
+        type: choice
+        options:
+          - macos-15
+          - macos-26
+        default: macos-15
       release:
         description: '发布到现有 Release（留空则只生成构建产物）'
         required: false
@@ -13,7 +20,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: ${{ inputs.runner }}
     timeout-minutes: 45
     permissions:
       contents: write
